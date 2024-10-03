@@ -1,8 +1,0 @@
-Package: parsero
-Version: 1.0
-Section: base
-Priority: optional
-Architecture: amd64
-Depends: golang-go
-Maintainer: zvdy <zzvdyy@gmail.com>
-Description: Parsero is a script written in Golang to read Robots.txt files and check Disallow entries.
