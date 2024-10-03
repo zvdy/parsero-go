@@ -62,15 +62,12 @@ Example:
 parsero --url http://example.com --only200
 ```
 
-License
-=======
-This project is licensed under the GNU General Public License License. See the [LICENSE](LICENSE) file for details.
+## License
+This project is licensed under the MIT. See the [LICENSE](LICENSE) file for details.
 
-Contributing
-============
+## Contributing
 Contributions are welcome! Please open an issue or submit a pull request for any changes.
 
-Acknowledgements
-================
+### Acknowledgements
 This project is a port of [parsero](https://github.com/behindthefirewalls/Parsero) which is written in Python, the repository ports it to Golang in order to optimize the speed in long `robots.txt` files.
 
