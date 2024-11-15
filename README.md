@@ -62,6 +62,36 @@ Example:
 parsero --url http://example.com --only200
 ```
 
+## Docker Setup
+
+You can use the [Dockerfile](Dockerfile) in the root of the repository in order to build parsero as a container. 
+
+### Step-by-Step Docker Setup
+
+
+1. **Build the Docker Image**:
+   Open a terminal in the root of your project directory and run the following command to build the Docker image:
+
+   ```sh
+   docker build -t parsero:latest .
+   ```
+
+2. **Run the Docker Container**:
+   After building the image, you can run it using the following command:
+
+   ```sh
+   docker run -it --rm parsero:latest --url http://example.com --only200
+   ```
+
+### Docker Hub
+
+You can retrieve the image directly from Docker hub too.
+
+   ```sh
+   docker pull zvdy/parsero:latest
+   docker run -it --rm zvdy/parsero:latest --url http://example.com --only200
+   ```
+
 ## License
 This project is licensed under the MIT. See the [LICENSE](LICENSE) file for details.
 
@@ -70,4 +100,3 @@ Contributions are welcome! Please open an issue or submit a pull request for any
 
 ### Acknowledgements
 This project is a port of [parsero](https://github.com/behindthefirewalls/Parsero) which is written in Python, the repository ports it to Golang in order to optimize the speed in long `robots.txt` files.
-
