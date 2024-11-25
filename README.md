@@ -1,4 +1,7 @@
 # Parsero
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/zvdy/parsero-go)](https://goreportcard.com/report/github.com/zvdy/parsero-go)
+
 Parsero is a free script written in Golang which reads the Robots.txt
 file of a web server and looks at the Disallow entries. The Disallow
 entries tell the search engines what directories or files hosted on a
