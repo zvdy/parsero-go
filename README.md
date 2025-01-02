@@ -46,8 +46,7 @@ Once you have Golang installed, you can install Parsero by running the following
 go get -u github.com/zvdy/parsero-go
 ```
 
-Usage
-=====
+## Usage
 You can run Parsero using the following command:
 
 ```sh
@@ -64,6 +63,13 @@ Example:
 ```sh
 parsero --url http://example.com --only200
 ```
+
+## Terminal Session Example
+
+You can watch a recorded terminal session here:
+
+[![asciinema recording](https://asciinema.org/a/Vd0kE9zVyPPwqLNjsEGDr4IZg.png)](https://asciinema.org/a/Vd0kE9zVyPPwqLNjsEGDr4IZg)
+
 
 ## Docker Setup
 
