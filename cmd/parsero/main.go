@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -28,19 +29,32 @@ func main() {
 				Usage: "Show only the 'HTTP 200' status code",
 			},
 			&cli.BoolFlag{
-				Name:  "searchbing",
-				Usage: "Search in Bing indexed Disallows",
+				Name:  "search",
+				Usage: "Search for indexed Disallow entries",
+			},
+			&cli.StringFlag{
+				Name:  "engine",
+				Usage: "Search engine to use (supported: bing, google)",
+				Value: "bing",
 			},
 			&cli.StringFlag{
 				Name:  "file",
 				Usage: "Scan a list of domains from a list",
 			},
+			&cli.IntFlag{
+				Name:    "concurrency",
+				Aliases: []string{"c"},
+				Usage:   "Number of concurrent workers (default: number of CPU cores)",
+				Value:   runtime.NumCPU(),
+			},
 		},
 		Action: func(c *cli.Context) error {
 			url := c.String("url")
 			only200 := c.Bool("only200")
-			searchbing := c.Bool("searchbing")
+			doSearch := c.Bool("search")
+			engine := c.String("engine")
 			file := c.String("file")
+			concurrency := c.Int("concurrency")
 
 			if url == "" && file == "" {
 				logo.PrintLogo()
@@ -68,6 +82,9 @@ func main() {
 				urls = append(urls, url)
 			}
 
+			// Parse the search engine using our helper function
+			searchEngine := search.ParseSearchEngine(engine)
+
 			logo.PrintLogo()
 			for _, url := range urls {
 				if strings.HasPrefix(url, "http://") {
@@ -75,9 +92,9 @@ func main() {
 				}
 				startTime := time.Now()
 				check.PrintDate(url)
-				check.ConnCheck(url, only200)
-				if searchbing {
-					search.SearchBing(url, only200)
+				check.ConnCheck(url, only200, concurrency)
+				if doSearch {
+					search.SearchDisallowEntries(url, only200, concurrency, searchEngine)
 				}
 				fmt.Printf("\nFinished in %.2f seconds.\n", time.Since(startTime).Seconds())
 			}
