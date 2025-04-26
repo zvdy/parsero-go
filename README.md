@@ -2,6 +2,8 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/zvdy/parsero-go)](https://goreportcard.com/report/github.com/zvdy/parsero-go)
 
+![parseropher](https://i.imgur.com/INJgn0i.png)
+
 Parsero is a free script written in Golang which reads the Robots.txt
 file of a web server and looks at the Disallow entries. The Disallow
 entries tell the search engines what directories or files hosted on a
@@ -21,7 +23,7 @@ Disallow entry in order to check automatically if these directories are
 available or not.
 
 Also, the fact the administrator write a robots.txt, it doesn't mean
-that the files or directories typed in the Dissallow entries will not
+that the files or directories typed in the Disallow entries will not
 be indexed by Bing, Google, Yahoo, etc. For this reason, Parsero is
 capable of searching in Bing to locate content indexed without the web
 administrator authorization. Parsero will check the HTTP status code in
@@ -50,18 +52,35 @@ go get -u github.com/zvdy/parsero-go
 You can run Parsero using the following command:
 
 ```sh
-parsero --url <URL> [--only200] [--searchbing] [--file <FILE>]
+parsero --url <URL> [--only200] [--search] [--engine <ENGINE>] [--file <FILE>] [--concurrency <N>]
 ```
 
 Options:
 - `--url`: Type the URL which will be analyzed.
 - `--only200`: Show only the 'HTTP 200' status code.
-- `--searchbing`: Search in Bing indexed Disallows.
+- `--search`: Search for indexed Disallow entries.
+- `--engine`: Search engine to use (supported: bing, google).
 - `--file`: Scan a list of domains from a list.
+- `--concurrency` or `-c`: Number of concurrent workers (default: number of CPU cores).
 
 Example:
 ```sh
 parsero --url http://example.com --only200
+```
+
+For faster processing on large websites, use the concurrency flag:
+```sh
+parsero --url http://example.com --concurrency 16
+```
+
+To search indexed Disallow entries using Google:
+```sh
+parsero --url http://example.com --search --engine google
+```
+
+To search indexed Disallow entries using Bing (default):
+```sh
+parsero --url http://example.com --search --engine bing
 ```
 
 ## Terminal Session Example
@@ -70,6 +89,11 @@ You can watch a recorded terminal session here:
 
 [![asciinema recording](https://asciinema.org/a/Vd0kE9zVyPPwqLNjsEGDr4IZg.png)](https://asciinema.org/a/Vd0kE9zVyPPwqLNjsEGDr4IZg)
 
+## Performance
+
+Parsero uses worker pools to process Disallow entries concurrently, which significantly improves performance when analyzing websites with large robots.txt files. By default, Parsero uses a number of workers equal to the available CPU cores, but you can adjust this with the `--concurrency` flag.
+
+Benchmark results show significant performance improvements with concurrency. For example, processing bing.com with 16 concurrent workers is much faster than sequential processing.
 
 ## Docker Setup
 
