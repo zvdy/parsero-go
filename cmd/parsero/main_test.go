@@ -19,8 +19,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// BenchmarkParseroBing benchmarks parsing bing.com robots.txt with Bing search
-func BenchmarkParseroBing(b *testing.B) {
+// BenchmarkParseroFullPipeline benchmarks the full parsero pipeline including check and search
+func BenchmarkParseroFullPipeline(b *testing.B) {
 	url := "bing.com"
 	only200 := false
 	doSearch := true
@@ -41,30 +41,8 @@ func BenchmarkParseroBing(b *testing.B) {
 	}
 }
 
-// BenchmarkParserGoogle benchmarks parsing google.com robots.txt with Google search
-func BenchmarkParserGoogle(b *testing.B) {
-	url := "google.com"
-	only200 := false
-	doSearch := true
-	engine := search.EngineGoogle
-	concurrency := runtime.NumCPU() // Use all available CPU cores
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		startTime := time.Now()
-
-		check.ConnCheck(url, only200, concurrency)
-		if doSearch {
-			search.SearchDisallowEntries(url, only200, concurrency, engine)
-		}
-
-		elapsed := time.Since(startTime)
-		b.ReportMetric(float64(elapsed.Milliseconds()), "ms/op")
-	}
-}
-
-// BenchmarkParseroDifferentConcurrency benchmarks with different concurrency levels
-func BenchmarkParseroDifferentConcurrency(b *testing.B) {
+// BenchmarkParseroIntegrationDifferentConcurrency benchmarks the full parsero pipeline with different concurrency levels
+func BenchmarkParseroIntegrationDifferentConcurrency(b *testing.B) {
 	url := "bing.com"
 	only200 := false
 	doSearch := true
@@ -90,34 +68,7 @@ func BenchmarkParseroDifferentConcurrency(b *testing.B) {
 	}
 }
 
-// TestDifferentSearchEngines tests both Bing and Google search engines
-func TestDifferentSearchEngines(b *testing.T) {
-	url := "github.com"
-	only200 := false
-	concurrency := runtime.NumCPU()
-
-	engines := []struct {
-		name   string
-		engine search.SearchEngine
-	}{
-		{"Bing", search.EngineBing},
-		{"Google", search.EngineGoogle},
-	}
-
-	for _, e := range engines {
-		b.Run(e.name, func(t *testing.T) {
-			startTime := time.Now()
-
-			check.ConnCheck(url, only200, concurrency)
-			search.SearchDisallowEntries(url, only200, concurrency, e.engine)
-
-			elapsed := time.Since(startTime)
-			fmt.Printf("Search engine: %s - Time: %v\n", e.name, elapsed)
-		})
-	}
-}
-
-// TestURLProcessingTiming tests the processing time for different websites
+// TestURLProcessingTiming tests the end-to-end processing time for different websites
 func TestURLProcessingTiming(t *testing.T) {
 	concurrency := runtime.NumCPU()
 	testCases := []struct {
@@ -188,8 +139,8 @@ func TestCLIFlagsProcessing(t *testing.T) {
 	}
 }
 
-// Benchmarks for multiple websites
-func BenchmarkMultipleWebsites(b *testing.B) {
+// BenchmarkCheckForMultipleWebsites benchmarks the check functionality for multiple websites
+func BenchmarkCheckForMultipleWebsites(b *testing.B) {
 	concurrency := runtime.NumCPU()
 	websites := []string{
 		"bing.com",

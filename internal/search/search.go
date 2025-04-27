@@ -1,4 +1,3 @@
-// internal/search/search.go
 package search
 
 import (
