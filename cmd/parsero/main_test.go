@@ -80,9 +80,9 @@ func TestURLProcessingTiming(t *testing.T) {
 	}{
 		{"Bing Basic", "bing.com", false, false, search.EngineBing},
 		{"Bing With Search", "bing.com", false, true, search.EngineBing},
-		{"Google Basic", "google.com", false, false, search.EngineBing},
+		{"DuckDuckGo Basic", "duckduckgo.com", false, false, search.EngineBing},
 		{"GitHub Basic", "github.com", false, false, search.EngineBing},
-		{"Google Search Engine", "github.com", false, true, search.EngineGoogle},
+		{"DuckDuckGo Search Engine", "github.com", false, true, search.EngineDuckDuckGo},
 	}
 
 	for _, tc := range testCases {
@@ -123,7 +123,7 @@ func TestCLIFlagsProcessing(t *testing.T) {
 		{"Only200 Flag", []string{"parsero", "--url", "example.com", "--only200"}, false, true},
 		{"Search Flag", []string{"parsero", "--url", "example.com", "--search"}, false, true},
 		{"Engine Bing", []string{"parsero", "--url", "example.com", "--search", "--engine", "bing"}, false, true},
-		{"Engine Google", []string{"parsero", "--url", "example.com", "--search", "--engine", "google"}, false, true},
+		{"Engine DuckDuckGo", []string{"parsero", "--url", "example.com", "--search", "--engine", "duckduckgo"}, false, true},
 		{"Concurrency Flag", []string{"parsero", "--url", "example.com", "--concurrency", "4"}, false, true},
 	}
 
@@ -144,7 +144,7 @@ func BenchmarkCheckForMultipleWebsites(b *testing.B) {
 	concurrency := runtime.NumCPU()
 	websites := []string{
 		"bing.com",
-		"google.com",
+		"duckduckgo.com",
 		"github.com",
 		"stackoverflow.com",
 		"wikipedia.org",

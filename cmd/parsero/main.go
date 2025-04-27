@@ -34,7 +34,7 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:  "engine",
-				Usage: "Search engine to use (supported: bing, google)",
+				Usage: "Search engine to use (supported: bing, duckduckgo)",
 				Value: "bing",
 			},
 			&cli.StringFlag{
@@ -87,9 +87,7 @@ func main() {
 
 			logo.PrintLogo()
 			for _, url := range urls {
-				if strings.HasPrefix(url, "http://") {
-					url = strings.TrimPrefix(url, "http://")
-				}
+				url = strings.TrimPrefix(url, "http://")
 				startTime := time.Now()
 				check.PrintDate(url)
 				check.ConnCheck(url, only200, concurrency)

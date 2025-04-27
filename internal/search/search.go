@@ -3,6 +3,7 @@ package search
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strings"
 	"sync"
@@ -22,8 +23,8 @@ type SearchEngine string
 
 // Available search engines
 const (
-	EngineBing   SearchEngine = "bing"
-	EngineGoogle SearchEngine = "google"
+	EngineBing       SearchEngine = "bing"
+	EngineDuckDuckGo SearchEngine = "duckduckgo"
 	// TODO: Add more search engines as needed
 )
 
@@ -40,8 +41,8 @@ func ParseSearchEngine(engine string) SearchEngine {
 	switch strings.ToLower(engine) {
 	case "bing":
 		return EngineBing
-	case "google":
-		return EngineGoogle
+	case "duckduckgo", "duck", "ddg":
+		return EngineDuckDuckGo
 	default:
 		return EngineBing // Default to Bing
 	}
@@ -53,7 +54,7 @@ func (e SearchEngine) String() string {
 }
 
 // SearchDisallowEntries searches for disallow entries using the specified search engine
-func SearchDisallowEntries(url string, only200 bool, concurrency int, engine SearchEngine) {
+func SearchDisallowEntries(url string, only200 bool, concurrency int, engine SearchEngine) []SearchResult {
 	if concurrency <= 0 {
 		concurrency = DefaultConcurrency
 	}
@@ -64,12 +65,15 @@ func SearchDisallowEntries(url string, only200 bool, concurrency int, engine Sea
 
 	if len(pathlist) == 0 {
 		fmt.Println(colors.YELLOW + "No disallow entries to search for." + colors.ENDC)
-		return
+		return nil
 	}
 
 	// Channel for search tasks
 	tasks := make(chan string, len(pathlist))
 	results := make(chan SearchResult, len(pathlist)*5) // Estimate multiple results per path
+
+	// Slice to collect all results
+	var allResults []SearchResult
 
 	// Launch worker pool for searches
 	var wg sync.WaitGroup
@@ -94,8 +98,8 @@ func SearchDisallowEntries(url string, only200 bool, concurrency int, engine Sea
 				switch engine {
 				case EngineBing:
 					searchURL = "http://www.bing.com/search?q=site:" + disurl
-				case EngineGoogle:
-					searchURL = "https://www.google.com/search?q=site:" + disurl
+				case EngineDuckDuckGo:
+					searchURL = "https://html.duckduckgo.com/html/?q=site:" + disurl
 				default:
 					// Default to Bing if unknown engine provided
 					searchURL = "http://www.bing.com/search?q=site:" + disurl
@@ -119,8 +123,8 @@ func SearchDisallowEntries(url string, only200 bool, concurrency int, engine Sea
 				switch engine {
 				case EngineBing:
 					processBingResults(resp, url, client, results)
-				case EngineGoogle:
-					processGoogleResults(resp, url, client, results)
+				case EngineDuckDuckGo:
+					processDuckDuckGoResults(resp, url, client, results)
 				default:
 					processBingResults(resp, url, client, results)
 				}
@@ -142,11 +146,14 @@ func SearchDisallowEntries(url string, only200 bool, concurrency int, engine Sea
 		close(results)
 	}()
 
-	// Display results as they come in
+	// Display results as they come in and collect them
 	for result := range results {
 		if result.Error != nil {
 			continue
 		}
+
+		// Add to our collection
+		allResults = append(allResults, result)
 
 		if result.StatusCode == 200 {
 			fmt.Println(colors.OKGREEN + " - " + result.URL + " " + result.Status + colors.ENDC)
@@ -154,11 +161,13 @@ func SearchDisallowEntries(url string, only200 bool, concurrency int, engine Sea
 			fmt.Println(colors.FAIL + " - " + result.URL + " " + result.Status + colors.ENDC)
 		}
 	}
+
+	return allResults
 }
 
 // For backward compatibility
-func SearchBing(url string, only200 bool, concurrency int) {
-	SearchDisallowEntries(url, only200, concurrency, EngineBing)
+func SearchBing(url string, only200 bool, concurrency int) []SearchResult {
+	return SearchDisallowEntries(url, only200, concurrency, EngineBing)
 }
 
 // processBingResults processes search results from Bing
@@ -180,32 +189,89 @@ func processBingResults(resp *http.Response, baseURL string, client *http.Client
 	})
 }
 
-// processGoogleResults processes search results from Google
-func processGoogleResults(resp *http.Response, baseURL string, client *http.Client, results chan<- SearchResult) {
+// processDuckDuckGoResults processes search results from DuckDuckGo
+func processDuckDuckGoResults(resp *http.Response, baseURL string, client *http.Client, results chan<- SearchResult) {
 	defer resp.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
+		fmt.Println(colors.FAIL + "Error parsing DuckDuckGo search results: " + err.Error() + colors.ENDC)
 		return
 	}
 
-	// Google formats results differently than Bing
-	// Look for URLs in the Google search results
-	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
-		href, exists := s.Attr("href")
-		if exists && strings.Contains(href, "/url?q=") {
-			// Extract actual URL from Google's redirect URL
-			actualURL := strings.Split(href, "/url?q=")[1]
-			if idx := strings.Index(actualURL, "&"); idx != -1 {
-				actualURL = actualURL[:idx]
-			}
+	// Track if we found any results
+	foundResults := false
 
-			// Only process URLs from the target domain
-			if strings.Contains(actualURL, baseURL) {
-				checkURL(actualURL, client, results)
+	// Method 1: Look for result URLs in DuckDuckGo HTML results
+	// The HTML version of DuckDuckGo uses this structure
+	doc.Find("a.result__url").Each(func(i int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if exists && strings.Contains(href, baseURL) {
+			foundResults = true
+			// Make sure it's a valid URL with proper protocol
+			if !strings.HasPrefix(href, "http") {
+				href = "http://" + href
+			}
+			checkURL(href, client, results)
+		}
+	})
+
+	// Method 2: Parse links from results
+	doc.Find("a.result__a").Each(func(i int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if exists {
+			// Extract target URL from DuckDuckGo redirects
+			if strings.HasPrefix(href, "/d.js?q=") {
+				href = href[6:] // Remove the /d.js?q= prefix
+				if idx := strings.Index(href, "&"); idx != -1 {
+					href = href[:idx]
+				}
+				// URL decode the href
+				href, _ = url.QueryUnescape(href)
+
+				if strings.Contains(href, baseURL) {
+					foundResults = true
+					checkURL(href, client, results)
+				}
 			}
 		}
 	})
+
+	// Method 3: Find URLs in the result snippets
+	doc.Find("div.result__snippet").Each(func(i int, s *goquery.Selection) {
+		text := s.Text()
+		words := strings.Fields(text)
+
+		for _, word := range words {
+			if (strings.HasPrefix(word, "http://") || strings.HasPrefix(word, "https://")) && strings.Contains(word, baseURL) {
+				foundResults = true
+				checkURL(word, client, results)
+			} else if strings.HasPrefix(word, baseURL) {
+				foundResults = true
+				checkURL("http://"+word, client, results)
+			}
+		}
+	})
+
+	// Method 4: Look for any other elements with URLs that might contain our base URL
+	doc.Find("a[href]").Each(func(i int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if exists && strings.Contains(href, baseURL) {
+			foundResults = true
+
+			// Make sure it's a valid URL
+			if !strings.HasPrefix(href, "http") {
+				href = "http://" + href
+			}
+
+			checkURL(href, client, results)
+		}
+	})
+
+	// If we didn't find any results, notify in logs
+	if !foundResults {
+		fmt.Println(colors.YELLOW + "No results found in DuckDuckGo search. The page structure may have changed or no matching URLs exist." + colors.ENDC)
+	}
 }
 
 // checkURL checks the status of a URL and sends the result to the results channel
@@ -228,4 +294,19 @@ func checkURL(url string, client *http.Client, results chan<- SearchResult) {
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 	}
+}
+
+// SetupTestData sets up test disallow paths for testing purposes
+// This allows tests to run independently without relying on external websites
+func SetupTestData() []SearchResult {
+	// Create mock search results
+	mockResults := []SearchResult{
+		{URL: "http://example.com/private", StatusCode: 200, Status: "200 OK"},
+		{URL: "http://example.com/admin", StatusCode: 403, Status: "403 Forbidden"},
+		{URL: "http://example.com/dashboard", StatusCode: 401, Status: "401 Unauthorized"},
+		{URL: "http://example.com/login", StatusCode: 200, Status: "200 OK"},
+		{URL: "http://example.com/internal", StatusCode: 404, Status: "404 Not Found"},
+	}
+
+	return mockResults
 }

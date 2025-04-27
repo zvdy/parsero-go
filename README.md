@@ -59,7 +59,7 @@ Options:
 - `--url`: Type the URL which will be analyzed.
 - `--only200`: Show only the 'HTTP 200' status code.
 - `--search`: Search for indexed Disallow entries.
-- `--engine`: Search engine to use (supported: bing, google).
+- `--engine`: Search engine to use (supported: bing, duckduckgo).
 - `--file`: Scan a list of domains from a list.
 - `--concurrency` or `-c`: Number of concurrent workers (default: number of CPU cores).
 
@@ -73,9 +73,9 @@ For faster processing on large websites, use the concurrency flag:
 parsero --url http://example.com --concurrency 16
 ```
 
-To search indexed Disallow entries using Google:
+To search indexed Disallow entries using DuckDuckGo:
 ```sh
-parsero --url http://example.com --search --engine google
+parsero --url http://example.com --search --engine duckduckgo
 ```
 
 To search indexed Disallow entries using Bing (default):
