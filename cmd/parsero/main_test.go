@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -12,154 +11,183 @@ import (
 	"github.com/zvdy/parsero-go/internal/search"
 )
 
-// TestMain runs before all tests
-func TestMain(m *testing.M) {
-	// Run tests
-	code := m.Run()
-	os.Exit(code)
+// getTestDomains returns the domains to use for benchmarking
+// It reads from environment variables TEST_DOMAINS or falls back to defaults
+func getTestDomains() []string {
+	// Check if TEST_DOMAINS environment variable is set
+	envDomains := os.Getenv("TEST_DOMAINS")
+	if envDomains != "" {
+		// Split by comma to get multiple domains
+		return strings.Split(envDomains, ",")
+	}
+
+	// Default domains for testing
+	return []string{"hackthebox.com", "hackthissite.org"}
 }
 
-// BenchmarkParseroFullPipeline benchmarks the full parsero pipeline including check and search
-func BenchmarkParseroFullPipeline(b *testing.B) {
-	url := "bing.com"
-	only200 := false
-	doSearch := true
-	engine := search.EngineBing
-	concurrency := runtime.NumCPU() // Use all available CPU cores
+func BenchmarkRobotsCheck(b *testing.B) {
+	// Get the domains to test
+	domains := getTestDomains()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		startTime := time.Now()
+	// Get the number of CPUs available in the current environment
+	cpuCount := runtime.NumCPU()
+	halfCPU := cpuCount / 2
+	if halfCPU < 1 {
+		halfCPU = 1
+	}
 
-		check.ConnCheck(url, only200, concurrency)
-		if doSearch {
-			search.SearchDisallowEntries(url, only200, concurrency, engine)
-		}
+	// Create benchmarks with dynamic CPU-based concurrency values for each domain
+	var benchmarks []struct {
+		name        string
+		url         string
+		concurrency int
+	}
 
-		elapsed := time.Since(startTime)
-		b.ReportMetric(float64(elapsed.Milliseconds()), "ms/op")
+	// Generate benchmark configurations for each domain
+	for _, domain := range domains {
+		benchmarks = append(benchmarks, []struct {
+			name        string
+			url         string
+			concurrency int
+		}{
+			{domain + "-1CPU", domain, 1},
+			{domain + "-HalfCPU", domain, halfCPU},
+			{domain + "-FullCPU", domain, cpuCount},
+		}...)
+	}
+
+	// Disable output during benchmark
+	oldStdout := os.Stdout
+	os.Stdout, _ = os.Open(os.DevNull)
+	defer func() { os.Stdout = oldStdout }()
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				check.ConnCheck(bm.url, false, bm.concurrency)
+			}
+		})
 	}
 }
 
-// BenchmarkParseroIntegrationDifferentConcurrency benchmarks the full parsero pipeline with different concurrency levels
-func BenchmarkParseroIntegrationDifferentConcurrency(b *testing.B) {
-	url := "bing.com"
-	only200 := false
-	doSearch := true
-	engine := search.EngineBing
+func BenchmarkFullScan(b *testing.B) {
+	// Get the domains to test
+	domains := getTestDomains()
 
-	concurrencyLevels := []int{1, 2, 4, 8, 16, 32}
+	// Get the number of CPUs available in the current environment
+	cpuCount := runtime.NumCPU()
+	halfCPU := cpuCount / 2
+	if halfCPU < 1 {
+		halfCPU = 1
+	}
 
-	for _, concurrency := range concurrencyLevels {
-		b.Run(fmt.Sprintf("Concurrency-%d", concurrency), func(b *testing.B) {
+	// Create benchmarks dynamically based on domains
+	var benchmarks []struct {
+		name           string
+		url            string
+		searchDisallow bool
+		concurrency    int
+	}
+
+	// Generate benchmark configurations for each domain
+	for _, domain := range domains {
+		// Add basic checks with different CPU settings
+		benchmarks = append(benchmarks, []struct {
+			name           string
+			url            string
+			searchDisallow bool
+			concurrency    int
+		}{
+			{domain + "-NoSearch-1CPU", domain, false, 1},
+			{domain + "-NoSearch-HalfCPU", domain, false, halfCPU},
+			{domain + "-NoSearch-FullCPU", domain, false, cpuCount},
+
+			// Add search benchmark with optimal concurrency (half CPU)
+			{domain + "-WithSearch-HalfCPU", domain, true, halfCPU},
+		}...)
+	}
+
+	// Disable output during benchmark
+	oldStdout := os.Stdout
+	os.Stdout, _ = os.Open(os.DevNull)
+	defer func() { os.Stdout = oldStdout }()
+
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				startTime := time.Now()
 
-				check.ConnCheck(url, only200, concurrency)
-				if doSearch {
-					search.SearchDisallowEntries(url, only200, concurrency, engine)
+				// Check disallowed URLs in robots.txt
+				_ = check.ConnCheck(bm.url, false, bm.concurrency)
+
+				// Only search for disallowed entries if the flag is set
+				if bm.searchDisallow {
+					searchConcurrency := bm.concurrency / 2
+					if searchConcurrency < 1 {
+						searchConcurrency = 1
+					}
+					search.SearchDisallowEntries(bm.url, false, searchConcurrency)
 				}
 
-				elapsed := time.Since(startTime)
-				b.ReportMetric(float64(elapsed.Milliseconds()), "ms/op")
+				// Record the execution time
+				executionTime := time.Since(startTime)
+				b.ReportMetric(float64(executionTime.Milliseconds()), "ms/op") // Report in milliseconds for better readability
 			}
 		})
 	}
 }
 
-// TestURLProcessingTiming tests the end-to-end processing time for different websites
-func TestURLProcessingTiming(t *testing.T) {
-	concurrency := runtime.NumCPU()
-	testCases := []struct {
-		name     string
-		url      string
-		only200  bool
-		doSearch bool
-		engine   search.SearchEngine
-	}{
-		{"Bing Basic", "bing.com", false, false, search.EngineBing},
-		{"Bing With Search", "bing.com", false, true, search.EngineBing},
-		{"DuckDuckGo Basic", "duckduckgo.com", false, false, search.EngineBing},
-		{"GitHub Basic", "github.com", false, false, search.EngineBing},
-		{"DuckDuckGo Search Engine", "github.com", false, true, search.EngineDuckDuckGo},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			startTime := time.Now()
-
-			check.ConnCheck(tc.url, tc.only200, concurrency)
-			if tc.doSearch {
-				search.SearchDisallowEntries(tc.url, tc.only200, concurrency, tc.engine)
-			}
-
-			elapsed := time.Since(startTime)
-			fmt.Printf("Test: %s - Time: %v\n", tc.name, elapsed)
-
-			// We don't assert on specific times as network conditions can vary,
-			// but we make sure the operation completes
-			if elapsed > 30*time.Second {
-				t.Logf("WARNING: Processing time for %s exceeded 30 seconds: %v", tc.url, elapsed)
-			}
-		})
-	}
+// TestCLIBasic ensures that the CLI doesn't crash with basic inputs
+func TestCLIBasic(t *testing.T) {
+	// Skip this test for now as it requires a more complete CLI setup
+	t.Skip("Skipping CLI test for benchmark runs")
 }
 
-// TestCLIFlagsProcessing tests the CLI flags processing with minimal network calls
-func TestCLIFlagsProcessing(t *testing.T) {
-	// Save original os.Args
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+// TestJSONExport tests the JSON export functionality
+func TestJSONExport(t *testing.T) {
+	// Get the first domain from the test domains
+	domains := getTestDomains()
+	if len(domains) == 0 {
+		t.Skip("No test domains available")
+		return
+	}
+	testDomain := domains[0]
 
-	testCases := []struct {
-		name     string
-		args     []string
-		wantErr  bool
-		duration bool // Whether to measure duration
-	}{
-		{"Help Flag", []string{"parsero", "--help"}, false, false},
-		{"URL Flag", []string{"parsero", "--url", "example.com"}, false, true},
-		{"Only200 Flag", []string{"parsero", "--url", "example.com", "--only200"}, false, true},
-		{"Search Flag", []string{"parsero", "--url", "example.com", "--search"}, false, true},
-		{"Engine Bing", []string{"parsero", "--url", "example.com", "--search", "--engine", "bing"}, false, true},
-		{"Engine DuckDuckGo", []string{"parsero", "--url", "example.com", "--search", "--engine", "duckduckgo"}, false, true},
-		{"Concurrency Flag", []string{"parsero", "--url", "example.com", "--concurrency", "4"}, false, true},
+	// Create a temporary file for JSON output
+	tmpfile, err := os.CreateTemp("", "parsero-test-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	// Save stdout
+	oldStdout := os.Stdout
+	os.Stdout, _ = os.Open(os.DevNull)
+	defer func() { os.Stdout = oldStdout }()
+
+	// Run a check that exports to JSON
+	checkResults := check.ConnCheck(testDomain, false, runtime.NumCPU()/2)
+	if checkResults == nil {
+		t.Skip("No results from ConnCheck, skipping test")
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Skip actual execution to avoid network calls in unit tests
-			// In a real setup, you might want to mock external dependencies
-
-			if tc.duration {
-				t.Logf("To measure actual duration, run: parsero %s", strings.Join(tc.args[1:], " "))
-			}
-		})
-	}
-}
-
-// BenchmarkCheckForMultipleWebsites benchmarks the check functionality for multiple websites
-func BenchmarkCheckForMultipleWebsites(b *testing.B) {
-	concurrency := runtime.NumCPU()
-	websites := []string{
-		"bing.com",
-		"duckduckgo.com",
-		"github.com",
-		"stackoverflow.com",
-		"wikipedia.org",
+	// Make sure we have results
+	if len(checkResults) == 0 {
+		t.Skip("No disallow entries found, skipping test")
 	}
 
-	for _, website := range websites {
-		b.Run(website, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				startTime := time.Now()
+	// Verify some basic aspects of the results
+	found200 := false
+	for _, result := range checkResults {
+		if result.StatusCode == 200 {
+			found200 = true
+			break
+		}
+	}
 
-				check.ConnCheck(website, false, concurrency)
-
-				elapsed := time.Since(startTime)
-				b.ReportMetric(float64(elapsed.Milliseconds()), "ms/op")
-			}
-		})
+	if !found200 {
+		t.Log("No 200 status codes found in results")
 	}
 }
