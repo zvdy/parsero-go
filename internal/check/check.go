@@ -4,41 +4,37 @@ import (
 	"bufio"
 	"fmt"
 	"net/http"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/zvdy/parsero-go/pkg/colors"
+	"github.com/zvdy/parsero-go/pkg/types"
 )
-
-// Result represents the result of a URL check
-type Result struct {
-	URL        string
-	StatusCode int
-	Status     string
-	Error      error
-}
-
-// DefaultConcurrency is the default number of concurrent workers
-// It uses the number of available CPU cores
-var DefaultConcurrency = runtime.NumCPU()
 
 var pathlist []string
 
-func ConnCheck(url string, only200 bool, concurrency int) {
+func ConnCheck(url string, only200 bool, concurrency int) []types.Result {
 	// Reset pathlist for this run
 	pathlist = []string{}
 
+	// Collection for results
+	var allResults []types.Result
+
 	// Use a default concurrency if not specified
 	if concurrency <= 0 {
-		concurrency = DefaultConcurrency
+		concurrency = types.DefaultConcurrency
 	}
 
-	resp, err := http.Get("http://" + url + "/robots.txt")
+	// Set up an optimized client for robots.txt
+	robotsClient := &http.Client{
+		Timeout: 5 * time.Second, // Shorter timeout for robots.txt
+	}
+
+	resp, err := robotsClient.Get("http://" + url + "/robots.txt")
 	if err != nil {
 		fmt.Println(colors.FAIL + "No robots.txt file has been found." + colors.ENDC)
-		return
+		return nil
 	}
 	defer resp.Body.Close()
 
@@ -54,14 +50,23 @@ func ConnCheck(url string, only200 bool, concurrency int) {
 
 	if len(pathlist) == 0 {
 		fmt.Println(colors.YELLOW + "No Disallow entries found in robots.txt." + colors.ENDC)
-		return
+		return nil
 	}
 
 	fmt.Printf("Found %d Disallow entries. Processing with %d workers...\n", len(pathlist), concurrency)
 
 	// Create a channel for paths to process
 	paths := make(chan string, len(pathlist))
-	results := make(chan Result, len(pathlist))
+	results := make(chan types.Result, len(pathlist))
+
+	// Create an optimized HTTP transport for high-concurrency
+	transport := &http.Transport{
+		MaxIdleConnsPerHost: concurrency * 2, // Double the number of idle connections
+		MaxConnsPerHost:     concurrency * 2, // Double the number of connections
+		IdleConnTimeout:     30 * time.Second,
+		DisableKeepAlives:   false, // Keep connections alive for reuse
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
 
 	// Start worker pool
 	var wg sync.WaitGroup
@@ -70,32 +75,42 @@ func ConnCheck(url string, only200 bool, concurrency int) {
 		go func() {
 			defer wg.Done()
 			client := &http.Client{
-				Timeout: 10 * time.Second, // Set a reasonable timeout
-				Transport: &http.Transport{
-					MaxIdleConnsPerHost: concurrency,
-					MaxConnsPerHost:     concurrency,
-					DisableKeepAlives:   false,
-				},
+				Timeout:   3 * time.Second, // Reduce timeout to 3 seconds
+				Transport: transport,
 			}
 
 			for p := range paths {
 				disurl := "http://" + url + "/" + p
 				req, err := http.NewRequest("GET", disurl, nil)
 				if err != nil {
-					results <- Result{URL: disurl, Error: err}
+					results <- types.Result{URL: disurl, Error: err}
 					continue
 				}
 
 				// Set user agent to avoid being blocked
 				req.Header.Set("User-Agent", "Mozilla/5.0 Parsero/1.0")
+				// Add accept header to reduce response size
+				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
+				// Only fetch the head if possible
+				req.Method = "HEAD"
 
 				resp, err := client.Do(req)
 				if err != nil {
-					results <- Result{URL: disurl, Error: err}
-					continue
+					// If HEAD fails, try GET
+					if req.Method == "HEAD" {
+						req.Method = "GET"
+						resp, err = client.Do(req)
+						if err != nil {
+							results <- types.Result{URL: disurl, Error: err}
+							continue
+						}
+					} else {
+						results <- types.Result{URL: disurl, Error: err}
+						continue
+					}
 				}
 
-				results <- Result{
+				results <- types.Result{
 					URL:        disurl,
 					StatusCode: resp.StatusCode,
 					Status:     resp.Status,
@@ -121,6 +136,9 @@ func ConnCheck(url string, only200 bool, concurrency int) {
 
 	// Process results as they come in
 	for result := range results {
+		// Add to our collection
+		allResults = append(allResults, result)
+
 		if result.Error != nil {
 			// Skip errors silently - same behavior as before
 			continue
@@ -132,6 +150,8 @@ func ConnCheck(url string, only200 bool, concurrency int) {
 			fmt.Println(colors.FAIL + result.URL + " " + result.Status + colors.ENDC)
 		}
 	}
+
+	return allResults
 }
 
 // GetDisallowPaths returns the list of disallow paths found
