@@ -1,8 +1,9 @@
 # Parsero
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/zvdy/parsero-go)](https://goreportcard.com/report/github.com/zvdy/parsero-go)
+[![AUR](https://img.shields.io/aur/version/parsero-go?logo=archlinux&logoColor=white)](https://aur.archlinux.org/packages/parsero-go)
 
-![parseropher](https://i.imgur.com/INJgn0i.png)
+<img src="https://i.imgur.com/INJgn0i.png" alt="parseropher" width="400">
 
 Parsero is a fast, concurrent Golang tool that reads the Robots.txt
 file of a web server and analyzes the Disallow entries. The Disallow
@@ -44,6 +45,30 @@ Once you have Golang installed, you can install Parsero by running the following
 
 ```sh
 go get -u github.com/zvdy/parsero-go
+```
+
+## Arch installation
+Parsero is available in the Arch User Repository (AUR). You can install it using any AUR helper like [yay](https://github.com/Jguer/yay) or [paru](https://github.com/Morganamilo/paru)
+
+```sh
+# Using yay
+yay -S parsero-go
+AUR Explicit (1): parsero-go-2.0.0-1
+:: PKGBUILD up to date, skipping download: parsero-go
+  1 parsero-go                       (Installed) (Build Files Exist)
+==> Packages to cleanBuild?
+==> [N]one [A]ll [Ab]ort [I]nstalled [No]tInstalled or (1 2 3, 1-3, ^4)
+
+# Using paru
+paru -S parsero-go
+:: Resolving dependencies...
+:: Calculating conflicts...
+:: Calculating inner conflicts...
+
+Aur (1)         Old Version   New Version    Make Only
+aur/parsero-go  r5.17b8c11-1  2.0.0-1        No
+
+:: Proceed with installation? [Y/n]: 
 ```
 
 ## Usage
@@ -130,6 +155,8 @@ The JSON output includes:
 - Statistics about total paths, success codes (200), other status codes, and errors
 
 When using the `--only200` flag, the JSON output will only include results with a 200 status code.
+
+## 
 
 ## Docker Setup
 
