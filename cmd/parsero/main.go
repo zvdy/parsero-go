@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/zvdy/parsero-go/internal/logo"
 	"github.com/zvdy/parsero-go/internal/search"
 	"github.com/zvdy/parsero-go/pkg/colors"
+	"github.com/zvdy/parsero-go/pkg/export"
+	"github.com/zvdy/parsero-go/pkg/types"
 )
 
 func main() {
@@ -27,20 +30,39 @@ func main() {
 				Name:  "only200",
 				Usage: "Show only the 'HTTP 200' status code",
 			},
-			&cli.BoolFlag{
-				Name:  "searchbing",
-				Usage: "Search in Bing indexed Disallows",
-			},
 			&cli.StringFlag{
 				Name:  "file",
 				Usage: "Scan a list of domains from a list",
+			},
+			&cli.BoolFlag{
+				Name:    "search-disallow",
+				Aliases: []string{"sb"},
+				Usage:   "Search for disallowed entries using Bing (optional)",
+			},
+			&cli.IntFlag{
+				Name:    "concurrency",
+				Aliases: []string{"c"},
+				Usage:   "Number of concurrent workers (default: number of CPU cores)",
+				Value:   runtime.NumCPU(),
+			},
+			&cli.StringFlag{
+				Name:    "json",
+				Aliases: []string{"j"},
+				Usage:   "Export results to JSON file (specify filename)",
+			},
+			&cli.BoolFlag{
+				Name:  "json-stdout",
+				Usage: "Print JSON results to stdout instead of normal output",
 			},
 		},
 		Action: func(c *cli.Context) error {
 			url := c.String("url")
 			only200 := c.Bool("only200")
-			searchbing := c.Bool("searchbing")
 			file := c.String("file")
+			searchDisallow := c.Bool("search-disallow")
+			concurrency := c.Int("concurrency")
+			jsonFile := c.String("json")
+			jsonStdout := c.Bool("json-stdout")
 
 			if url == "" && file == "" {
 				logo.PrintLogo()
@@ -68,18 +90,65 @@ func main() {
 				urls = append(urls, url)
 			}
 
-			logo.PrintLogo()
+			if !jsonStdout {
+				logo.PrintLogo()
+			}
+
 			for _, url := range urls {
-				if strings.HasPrefix(url, "http://") {
-					url = strings.TrimPrefix(url, "http://")
-				}
+				url = strings.TrimPrefix(url, "http://")
 				startTime := time.Now()
-				check.PrintDate(url)
-				check.ConnCheck(url, only200)
-				if searchbing {
-					search.SearchBing(url, only200)
+
+				if !jsonStdout {
+					check.PrintDate(url)
 				}
-				fmt.Printf("\nFinished in %.2f seconds.\n", time.Since(startTime).Seconds())
+
+				// Check disallowed URLs in robots.txt
+				checkResults := check.ConnCheck(url, only200, concurrency)
+
+				// Initialize searchResults
+				var searchResults []types.Result
+
+				// Only search for disallowed entries if the flag is set
+				if searchDisallow {
+					if !jsonStdout {
+						fmt.Println("\nSearching for disallowed entries using Bing...")
+					}
+					searchResults = search.SearchDisallowEntries(url, only200, concurrency)
+				}
+
+				// Combine all results for export
+				var allResults []types.Result
+				allResults = append(allResults, checkResults...)
+				allResults = append(allResults, searchResults...)
+
+				duration := time.Since(startTime)
+
+				// Handle JSON output if requested
+				if jsonFile != "" || jsonStdout {
+					scanResult := export.CreateScanResult(url, duration, allResults, only200)
+
+					if jsonStdout {
+						jsonStr, err := export.ToJSON(scanResult)
+						if err != nil {
+							fmt.Println(colors.FAIL + "Error creating JSON output: " + err.Error() + colors.ENDC)
+						} else {
+							fmt.Println(jsonStr)
+						}
+					}
+
+					if jsonFile != "" {
+						err := export.SaveToFile(scanResult, jsonFile)
+						if err != nil {
+							fmt.Println(colors.FAIL + "Error saving JSON to file: " + err.Error() + colors.ENDC)
+						} else if !jsonStdout {
+							fmt.Println(colors.OKGREEN + "Results exported to " + jsonFile + colors.ENDC)
+						}
+					}
+				}
+
+				if !jsonStdout {
+					fmt.Printf("\nFinished in %.2f seconds.\n", duration.Seconds())
+				}
 			}
 			return nil
 		},
