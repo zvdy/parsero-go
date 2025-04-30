@@ -161,6 +161,6 @@ func GetDisallowPaths() []string {
 }
 
 func PrintDate(url string) {
-	fmt.Println("Starting Parsero v1.0.0 (https://github.com/zvdy/parsero-go) at " + time.Now().Format("01/02/2006 15:04:05"))
+	fmt.Println("Starting Parsero v2.0.0 (https://github.com/zvdy/parsero-go) at " + time.Now().Format("01/02/2006 15:04:05"))
 	fmt.Println("Parsero scan report for " + url)
 }
