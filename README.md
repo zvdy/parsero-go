@@ -2,8 +2,10 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/zvdy/parsero-go)](https://goreportcard.com/report/github.com/zvdy/parsero-go)
 [![AUR](https://img.shields.io/aur/version/parsero-go?logo=archlinux&logoColor=white)](https://aur.archlinux.org/packages/parsero-go)
-
-<img src="https://i.imgur.com/INJgn0i.png" alt="parseropher" width="400">
+<div align="center">
+   <img src="https://i.imgur.com/INJgn0i.png" alt="parseropher" width="160">
+   <p><em?>Where robots.txt end, discovery begins.</em></p>
+</div>
 
 Parsero is a fast, concurrent Golang tool that reads the Robots.txt
 file of a web server and analyzes the Disallow entries. The Disallow
