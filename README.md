@@ -3,7 +3,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/zvdy/parsero-go)](https://goreportcard.com/report/github.com/zvdy/parsero-go)
 [![AUR](https://img.shields.io/aur/version/parsero-go?logo=archlinux&logoColor=white)](https://aur.archlinux.org/packages/parsero-go)
 <div align="center">
-   <img src="https://i.imgur.com/INJgn0i.png" alt="parseropher" width="160">
+   <img src="https://i.imgur.com/INJgn0i.png" alt="parseropher" width="260">
    <p><em?>Where robots.txt end, discovery begins.</em></p>
 </div>
 
