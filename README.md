@@ -25,7 +25,7 @@ not, you can use Parsero to check the HTTP status code of each
 Disallow entry to automatically determine if these directories are
 available or not.
 
-Also, the fact an administrator writes a robots.txt, doesn't mean
+Also, the fact that an administrator writes a robots.txt, doesn't mean
 that the files or directories typed in the Disallow entries will not
 be indexed by search engines. For this reason, Parsero is
 capable of searching in Bing to locate content indexed without the web
@@ -39,6 +39,10 @@ When you execute Parsero, you can see the HTTP status codes. For example:
     404 Not Found   The server hasn't found anything matching the Request-URI.
     302 Found       The requested resource resides temporarily under a different URI.
     ...
+
+## Terminal Session Example
+
+![asciinema](resources/demo.gif)
 
 ## Installation
 To install Parsero, you need to have Golang installed on your machine. You can download and install Golang from [here](https://golang.org/dl/).
@@ -126,12 +130,6 @@ Process multiple domains from a file:
 ```sh
 parsero-go --file domains.txt --only200
 ```
-
-## Terminal Session Example
-
-You can watch a recorded terminal session here:
-
-[![asciinema recording](https://asciinema.org/a/Vd0kE9zVyPPwqLNjsEGDr4IZg.png)](https://asciinema.org/a/Vd0kE9zVyPPwqLNjsEGDr4IZg)
 
 ## Performance
 
