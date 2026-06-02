@@ -1,0 +1,19 @@
+{{define "index"}}{{template "header" .}}
+  <section class="card">
+    <h1>Scan a site's robots.txt</h1>
+    <p class="muted">Parsero fetches <code>/robots.txt</code>, then probes each
+      <code>Disallow</code> path to find what's actually reachable.</p>
+    <form hx-post="/ui/scans" hx-target="#submit-error" hx-swap="innerHTML" class="scan-form">
+      <input type="text" name="target" placeholder="example.com" required autofocus>
+      <label class="check"><input type="checkbox" name="only200"> Only show HTTP 200</label>
+      {{if .BingEnabled}}<label class="check"><input type="checkbox" name="search_bing"> Augment with Bing</label>{{end}}
+      <button type="submit">Scan</button>
+    </form>
+    <div id="submit-error" class="error-slot"></div>
+  </section>
+
+  <section class="card">
+    <h2>Recent scans</h2>
+    {{template "history" .}}
+  </section>
+{{template "footer" .}}{{end}}

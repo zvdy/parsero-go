@@ -1,0 +1,30 @@
+{{define "scan"}}{{template "header" .}}
+  <section class="card">
+    <h1>{{.Scan.Target}}</h1>
+    <p class="muted">scan <code>{{.Scan.ID}}</code></p>
+
+    <!-- Live status: SSE primary, polling fallback via hx-trigger every 2s.
+         The status partial sets HX-Trigger: scan-finished to stop polling. -->
+    <div id="status"
+         hx-get="/ui/scans/{{.Scan.ID}}/status"
+         hx-trigger="load, every 2s"
+         hx-swap="innerHTML">
+      <p class="muted">loading status…</p>
+    </div>
+
+    <!-- Results load when the scan finishes (scan-finished event from #status). -->
+    <div id="results"
+         hx-get="/ui/scans/{{.Scan.ID}}/results"
+         hx-trigger="scan-finished from:body"
+         hx-swap="innerHTML">
+    </div>
+  </section>
+
+  <script>
+    // Stop the status poller once finished to avoid hammering the server.
+    document.body.addEventListener('scan-finished', function () {
+      var s = document.getElementById('status');
+      if (s) s.setAttribute('hx-trigger', 'none');
+    });
+  </script>
+{{template "footer" .}}{{end}}

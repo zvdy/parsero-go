@@ -1,0 +1,19 @@
+{{define "results_table"}}
+  <h2>Results</h2>
+  {{if .Results}}
+  <table class="results">
+    <thead><tr><th>URL</th><th>Status</th><th>Source</th></tr></thead>
+    <tbody>
+      {{range .Results}}
+      <tr class="{{if .OK}}row-ok{{else if .Error}}row-err{{else}}row-other{{end}}">
+        <td class="url">{{.URL}}</td>
+        <td>{{if .Error}}<span class="error-text">{{.Error}}</span>{{else}}{{.Status}}{{end}}</td>
+        <td class="muted">{{.Source}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="muted">No disallow entries were found, or none were reachable.</p>
+  {{end}}
+{{end}}

@@ -1,0 +1,17 @@
+{{define "status"}}
+  <div class="status-block">
+    <span class="badge {{statusClass .Scan}}">{{.Scan.Status}}</span>
+    {{if eq .Scan.Status "running"}}
+      <div class="progress">
+        <div class="bar" style="width: {{if .Total}}{{percent .Done .Total}}{{else}}5{{end}}%"></div>
+      </div>
+      <span class="muted">{{.Done}} / {{.Total}} paths</span>
+    {{else if eq .Scan.Status "done"}}
+      <span class="muted">{{.Scan.TotalPaths}} paths · {{.Scan.Status200}} reachable · {{printf "%.1f" .Scan.DurationSeconds}}s</span>
+    {{else if eq .Scan.Status "failed"}}
+      <span class="error-text">{{.Scan.ErrorMessage}}</span>
+    {{else}}
+      <span class="muted">waiting for a worker…</span>
+    {{end}}
+  </div>
+{{end}}
