@@ -19,6 +19,12 @@ var ErrNoRobots = fmt.Errorf("no robots.txt file has been found")
 // The list is returned rather than stored in a global, so concurrent scans never
 // interfere. Honors ctx and the MaxPaths cap.
 func (s *Scanner) FetchDisallowPaths(ctx context.Context, target string) ([]string, error) {
+	if s.robotsCache != nil {
+		if paths, ok := s.robotsCache.GetRobots(ctx, target); ok {
+			return paths, nil
+		}
+	}
+
 	url := "http://" + target + "/robots.txt"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -46,6 +52,10 @@ func (s *Scanner) FetchDisallowPaths(ctx context.Context, target string) ([]stri
 	}
 	if err := sc.Err(); err != nil {
 		return nil, err
+	}
+
+	if s.robotsCache != nil {
+		s.robotsCache.SetRobots(ctx, target, paths, s.robotsTTL)
 	}
 	return paths, nil
 }

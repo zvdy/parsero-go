@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS scan_results;
+DROP TABLE IF EXISTS scans;
+DROP TYPE IF EXISTS job_status;

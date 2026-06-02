@@ -47,12 +47,22 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
+// RobotsCache is an optional cache for robots.txt disallow paths, letting bursts
+// of scans on the same target skip the robots fetch. Implementations must be safe
+// for concurrent use. A nil cache disables caching.
+type RobotsCache interface {
+	GetRobots(ctx context.Context, target string) ([]string, bool)
+	SetRobots(ctx context.Context, target string, paths []string, ttl time.Duration)
+}
+
 // Scanner runs robots.txt audits. Construct it with New and reuse it across
 // scans; it carries no per-scan mutable state.
 type Scanner struct {
-	client   *http.Client
-	opts     Options
-	progress func(done, total int)
+	client      *http.Client
+	opts        Options
+	progress    func(done, total int)
+	robotsCache RobotsCache
+	robotsTTL   time.Duration
 }
 
 // New builds a Scanner. If client is nil a default client is used. The client's
@@ -63,6 +73,12 @@ func New(client *http.Client, opts Options) *Scanner {
 		client = &http.Client{}
 	}
 	return &Scanner{client: client, opts: opts.withDefaults()}
+}
+
+// SetRobotsCache attaches an optional robots.txt cache with the given TTL.
+func (s *Scanner) SetRobotsCache(c RobotsCache, ttl time.Duration) {
+	s.robotsCache = c
+	s.robotsTTL = ttl
 }
 
 // OnProgress registers a callback invoked as path probes complete. It is called
