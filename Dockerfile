@@ -1,23 +1,24 @@
-# Use the official Go image as the base image
-FROM golang:1.23-alpine
+# Multi-stage build. By default builds the server (parserod); pass
+#   --build-arg TARGET=parsero
+# to build the CLI instead.
+FROM golang:1.25-alpine AS build
 
-# Set the working directory inside the container
+ARG TARGET=parserod
 WORKDIR /app
 
-# Copy go.mod and go.sum files
+# Cache dependencies first.
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
-# Copy the rest of the application code
+# Build.
 COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/app ./cmd/${TARGET}
 
-# Build the Go application
-RUN go build -o parsero ./cmd/parsero
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 app
+USER app
+WORKDIR /home/app
+COPY --from=build /out/app /usr/local/bin/app
 
-# Expose the port the app runs on
 EXPOSE 8080
-
-# Set the entry point to run the application
-ENTRYPOINT ["./parsero"]
+ENTRYPOINT ["/usr/local/bin/app"]

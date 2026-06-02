@@ -1,0 +1,80 @@
+# Local stack for the parsero SaaS: Postgres (durable), Redis (queue/cache/
+# throttle), and the parserod app. An optional oauth2-proxy profile shows how a
+# reverse proxy injects the trusted identity header in production.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: parsero
+      POSTGRES_PASSWORD: parsero
+      POSTGRES_DB: parsero
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parsero"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      args:
+        TARGET: parserod
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgres://parsero:parsero@postgres:5432/parsero?sslmode=disable"
+      REDIS_URL: "redis://redis:6379/0"
+      # In production the reverse proxy authenticates and injects this header;
+      # for local dev, requests without it fall back to the client IP.
+      IDENTITY_HEADER: "X-Auth-Request-Email"
+      BING_ENABLED: "false"
+      MAX_PER_USER: "2"
+      MAX_INFLIGHT: "50"
+      MAX_QUEUE_DEPTH: "100"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Optional: a reverse proxy doing auth + forward-auth header injection.
+  # Enable with:  docker compose --profile auth up
+  # This is a skeleton — fill in your OIDC provider details before using.
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    profiles: ["auth"]
+    command:
+      - --http-address=0.0.0.0:4180
+      - --upstream=http://app:8080
+      - --email-domain=*
+      - --set-xauthrequest=true            # injects X-Auth-Request-Email upstream
+      - --pass-access-token=false
+      - --skip-provider-button=false
+    environment:
+      OAUTH2_PROXY_PROVIDER: "oidc"
+      OAUTH2_PROXY_CLIENT_ID: "CHANGE_ME"
+      OAUTH2_PROXY_CLIENT_SECRET: "CHANGE_ME"
+      OAUTH2_PROXY_COOKIE_SECRET: "CHANGE_ME_32_BYTES_BASE64"
+      OAUTH2_PROXY_OIDC_ISSUER_URL: "https://your-idp.example.com"
+    ports:
+      - "4180:4180"
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
