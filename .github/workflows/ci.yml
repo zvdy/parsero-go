@@ -60,3 +60,39 @@ jobs:
         run: docker build --build-arg TARGET=parsero -t parsero:ci .
       - name: Smoke-test CLI image
         run: docker run --rm parsero:ci --help
+
+  helm:
+    name: helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: helm lint
+        run: helm lint deploy/helm/parserod
+      - name: helm template (default + variations)
+        run: |
+          helm template t deploy/helm/parserod >/dev/null
+          helm template t deploy/helm/parserod \
+            --set ingress.enabled=true --set worker.keda.enabled=false \
+            --set secrets.existingSecret=my-secret >/dev/null
+
+  terraform:
+    name: terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: fmt check
+        run: terraform -chdir=deploy/terraform fmt -recursive -check
+      - name: validate module
+        run: |
+          terraform -chdir=deploy/terraform init -backend=false -input=false
+          terraform -chdir=deploy/terraform validate
+      - name: validate example
+        run: |
+          terraform -chdir=deploy/terraform/examples/basic init -backend=false -input=false
+          terraform -chdir=deploy/terraform/examples/basic validate

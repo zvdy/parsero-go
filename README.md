@@ -240,7 +240,12 @@ Then open <http://localhost:8080>.
 | `GET`  | `/api/scans` | list the caller's scans |
 | `GET`  | `/api/scans/{id}` | scan status + summary |
 | `GET`  | `/api/scans/{id}/results` | per-path results |
+| `GET`  | `/api/scans/{id}/sarif` | results as SARIF 2.1.0 (GitHub code scanning) |
 | `GET`  | `/api/scans/{id}/events` | live progress via Server-Sent Events |
+| `POST` | `/api/schedules` | create a recurring monitor |
+| `GET`  | `/api/schedules` | list monitors |
+| `DELETE` | `/api/schedules/{id}` | delete a monitor |
+| `POST` | `/api/schedules/{id}/enable` · `/disable` | toggle a monitor |
 
 ```sh
 curl -X POST http://localhost:8080/api/scans \
@@ -249,6 +254,33 @@ curl -X POST http://localhost:8080/api/scans \
   -d '{"target":"example.com","only200":true}'
 ```
 
+### Recurring monitors (scheduled scans + diff alerts)
+
+Create a monitor and parsero re-scans on a cron schedule, **diffing each run
+against the previous one** and posting a webhook/Slack alert when a `Disallow`
+path *becomes reachable* — the security regression worth catching. Webhook URLs
+are SSRF-guarded like scan targets.
+
+```sh
+curl -X POST http://localhost:8080/api/schedules \
+  -H 'Content-Type: application/json' -H 'X-Auth-Request-Email: you@example.com' \
+  -d '{"target":"example.com","cron":"@daily","notify_webhook":"https://hooks.slack.com/...","notify_on_change":true}'
+```
+
+### Deploy
+
+Production-ready infrastructure as code lives under [`deploy/`](deploy):
+
+- **[Helm chart](deploy/helm/parserod)** — split **web** (HPA on CPU) and
+  **worker** (KEDA autoscaling on the asynq queue backlog) Deployments, a
+  hardened pod security context, optional Ingress/TLS, and a managed or
+  bring-your-own Secret for the DB/Redis URLs.
+- **[Terraform module (AWS)](deploy/terraform)** — ECS Fargate (web + worker
+  services), RDS Postgres, ElastiCache Redis, an ALB, and Secrets Manager.
+
+Both run the binary in two roles via `ROLE=web|worker|all`, so the HTTP tier and
+the scan-worker tier scale independently.
+
 ### Configuration
 
 Configured via environment variables (defaults shown): `PORT` (8080),
@@ -256,7 +288,9 @@ Configured via environment variables (defaults shown): `PORT` (8080),
 `SCAN_TIMEOUT` (120s), `MAX_PATHS` (500), `WORKER_COUNT` (4),
 `MAX_INFLIGHT` (50), `MAX_PER_USER` (2), `MAX_QUEUE_DEPTH` (100),
 `RATE_LIMIT_RPS` (5), `RATE_LIMIT_BURST` (10),
-`IDENTITY_HEADER` (`X-Auth-Request-Email`), `BING_ENABLED` (false).
+`IDENTITY_HEADER` (`X-Auth-Request-Email`), `BING_ENABLED` (false),
+`ROLE` (`all`; `web`|`worker`|`all`), `SCHEDULER_ENABLED` (true),
+`SCHEDULER_SYNC` (1m).
 
 ## Docker Setup
 
