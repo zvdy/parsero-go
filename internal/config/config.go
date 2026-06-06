@@ -33,7 +33,20 @@ type Config struct {
 	IdentityHeader     string
 	DefaultConcurrency int
 	BingEnabled        bool
+
+	// Role selects what this instance runs: "web" (HTTP only), "worker" (job
+	// processing + scheduler only), or "all" (both). Splitting roles lets the
+	// web tier and worker tier scale independently (see the Helm chart).
+	Role             string
+	SchedulerEnabled bool          // run the periodic-scan scheduler on this instance
+	SchedulerSync    time.Duration // how often the scheduler re-reads schedules from the DB
 }
+
+// RunsWeb reports whether this instance should serve HTTP.
+func (c Config) RunsWeb() bool { return c.Role == "web" || c.Role == "all" }
+
+// RunsWorker reports whether this instance should process jobs.
+func (c Config) RunsWorker() bool { return c.Role == "worker" || c.Role == "all" }
 
 // Load reads configuration from the environment.
 func Load() (Config, error) {
@@ -55,6 +68,14 @@ func Load() (Config, error) {
 		IdentityHeader:     getStr("IDENTITY_HEADER", "X-Auth-Request-Email"),
 		DefaultConcurrency: getInt("DEFAULT_CONCURRENCY", runtime.NumCPU()),
 		BingEnabled:        getBool("BING_ENABLED", false),
+		Role:               getStr("ROLE", "all"),
+		SchedulerEnabled:   getBool("SCHEDULER_ENABLED", true),
+		SchedulerSync:      getDur("SCHEDULER_SYNC", time.Minute),
+	}
+	switch c.Role {
+	case "web", "worker", "all":
+	default:
+		return c, fmt.Errorf("invalid ROLE %q (want web|worker|all)", c.Role)
 	}
 	if c.DatabaseURL == "" {
 		return c, fmt.Errorf("DATABASE_URL is required")

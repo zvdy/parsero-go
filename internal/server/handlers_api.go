@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/zvdy/parsero-go/internal/safety"
+	"github.com/zvdy/parsero-go/internal/sarif"
 	"github.com/zvdy/parsero-go/internal/store"
 )
 
@@ -191,6 +192,25 @@ func (s *Server) handleGetResults(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// handleGetSARIF returns the scan's reachable paths as a SARIF 2.1.0 document,
+// suitable for upload to GitHub code scanning.
+func (s *Server) handleGetSARIF(w http.ResponseWriter, r *http.Request) {
+	sc, err := s.loadOwnedScan(r)
+	if err != nil {
+		s.writeScanLoadErr(w, err)
+		return
+	}
+	rows, err := s.store.ListResults(r.Context(), sc.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "could not load results")
+		return
+	}
+	w.Header().Set("Content-Type", "application/sarif+json")
+	w.Header().Set("Content-Disposition", `attachment; filename="parsero-`+sc.ID+`.sarif"`)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(sarif.Build(sc, rows))
 }
 
 // loadOwnedScan fetches the scan named by the {id} path value and verifies the

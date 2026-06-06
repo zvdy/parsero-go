@@ -5,10 +5,14 @@ package jobs
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/zvdy/parsero-go/internal/cache"
 	"github.com/zvdy/parsero-go/internal/config"
+	"github.com/zvdy/parsero-go/internal/diff"
+	"github.com/zvdy/parsero-go/internal/notify"
+	"github.com/zvdy/parsero-go/internal/queue"
 	"github.com/zvdy/parsero-go/internal/safety"
 	"github.com/zvdy/parsero-go/internal/scanner"
 	"github.com/zvdy/parsero-go/internal/store"
@@ -19,13 +23,49 @@ import (
 type Processor struct {
 	store    *store.Store
 	cache    *cache.Cache
+	queue    *queue.Client
+	notifier *notify.Notifier
 	cfg      config.Config
 	instance string // identifier recorded as locked_by for audit
 }
 
 // New builds a Processor.
-func New(st *store.Store, c *cache.Cache, cfg config.Config, instance string) *Processor {
-	return &Processor{store: st, cache: c, cfg: cfg, instance: instance}
+func New(st *store.Store, c *cache.Cache, q *queue.Client, cfg config.Config, instance string) *Processor {
+	return &Processor{
+		store:    st,
+		cache:    c,
+		queue:    q,
+		notifier: notify.New(),
+		cfg:      cfg,
+		instance: instance,
+	}
+}
+
+// HandleScheduled fires on a schedule's cron tick: it creates a fresh scan
+// (trigger=scheduled, bypassing the result cache so changes are detected) and
+// enqueues it for processing like any other scan.
+func (p *Processor) HandleScheduled(ctx context.Context, scheduleID string) error {
+	sch, err := p.store.GetSchedule(ctx, scheduleID)
+	if err != nil {
+		return err
+	}
+	if !sch.Enabled {
+		return nil
+	}
+	id, err := p.store.CreateScan(ctx, store.Scan{
+		UserID:      sch.UserID,
+		Target:      sch.Target,
+		OptionsHash: sch.OptionsHash,
+		Only200:     sch.Only200,
+		SearchBing:  sch.SearchBing,
+		ScheduleID:  &sch.ID,
+		Trigger:     "scheduled",
+	})
+	if err != nil {
+		return err
+	}
+	_ = p.store.MarkScheduleRun(ctx, scheduleID)
+	return p.queue.Enqueue(ctx, id)
 }
 
 // Handle runs a single scan job. It is the asynq Handler. Errors returned here
@@ -82,7 +122,64 @@ func (p *Processor) Handle(ctx context.Context, scanID string) (err error) {
 
 	// Populate the result cache so identical requests skip the queue.
 	_ = p.cache.PutScanID(ctx, sc.OptionsHash, scanID, p.cfg.ScanCacheTTL)
+
+	// For scheduled scans, diff against the previous run and alert on changes.
+	if sc.ScheduleID != nil {
+		p.diffAndNotify(ctx, sc, results)
+	}
 	return nil
+}
+
+// diffAndNotify compares a freshly-completed scheduled scan to the previous run
+// of the same target and, per the schedule's notification settings, posts an
+// alert. Failures here never fail the scan — they're logged best-effort.
+func (p *Processor) diffAndNotify(ctx context.Context, sc store.Scan, results []types.Result) {
+	sch, err := p.store.GetSchedule(ctx, *sc.ScheduleID)
+	if err != nil || sch.NotifyWebhook == "" {
+		return
+	}
+
+	prev, err := p.store.PreviousDoneScan(ctx, sc.OptionsHash, sc.ID)
+	if err != nil {
+		return // no prior scan to diff against (first run) — nothing to alert
+	}
+	prevRows, err := p.store.ListResults(ctx, prev.ID)
+	if err != nil {
+		return
+	}
+
+	d := diff.Compute(toProbes(prevRows), probesFromResults(results))
+	if sch.NotifyOnChange && !d.HasChanges() {
+		return
+	}
+
+	alert := notify.Alert{
+		Event:             "scan.changed",
+		Target:            sc.Target,
+		ScanID:            sc.ID,
+		ScheduleID:        sch.ID,
+		NewlyReachable:    d.NewlyReachable,
+		NoLongerReachable: d.NoLongerReachable,
+	}
+	if err := p.notifier.Send(ctx, sch.NotifyWebhook, alert); err != nil {
+		log.Printf("notify schedule %s: %v", sch.ID, err)
+	}
+}
+
+func toProbes(rows []store.ResultRow) []diff.Probe {
+	out := make([]diff.Probe, len(rows))
+	for i, r := range rows {
+		out[i] = diff.Probe{URL: r.URL, StatusCode: r.StatusCode}
+	}
+	return out
+}
+
+func probesFromResults(results []types.Result) []diff.Probe {
+	out := make([]diff.Probe, 0, len(results))
+	for _, r := range results {
+		out = append(out, diff.Probe{URL: r.URL, StatusCode: r.StatusCode})
+	}
+	return out
 }
 
 // persist writes per-path results and the scan summary to Postgres.

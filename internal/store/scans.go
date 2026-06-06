@@ -8,16 +8,46 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// CreateScan inserts a new queued scan and returns its generated id.
+// CreateScan inserts a new queued scan and returns its generated id. Trigger
+// defaults to "manual"; ScheduleID links the scan to a recurring monitor.
 func (s *Store) CreateScan(ctx context.Context, sc Scan) (string, error) {
+	trigger := sc.Trigger
+	if trigger == "" {
+		trigger = "manual"
+	}
 	var id string
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO scans (user_id, target, options_hash, only200, search_bing, status)
-		VALUES ($1, $2, $3, $4, $5, 'queued')
+		INSERT INTO scans (user_id, target, options_hash, only200, search_bing, status, schedule_id, trigger)
+		VALUES ($1, $2, $3, $4, $5, 'queued', $6, $7)
 		RETURNING id`,
-		sc.UserID, sc.Target, sc.OptionsHash, sc.Only200, sc.SearchBing,
+		sc.UserID, sc.Target, sc.OptionsHash, sc.Only200, sc.SearchBing, sc.ScheduleID, trigger,
 	).Scan(&id)
 	return id, err
+}
+
+// PreviousDoneScan returns the most recent completed scan with the same
+// options_hash, excluding excludeID. Used to diff a fresh scan against the prior
+// state of the same target. Returns ErrNotFound when there's no prior scan.
+func (s *Store) PreviousDoneScan(ctx context.Context, optionsHash, excludeID string) (Scan, error) {
+	var sc Scan
+	err := s.pool.QueryRow(ctx, `
+		SELECT id, user_id, target, options_hash, only200, search_bing, status,
+		       COALESCE(duration_seconds, 0), total_paths, status_200, other_status,
+		       errors, COALESCE(error_message, ''), created_at, started_at, finished_at,
+		       COALESCE(trigger, 'manual')
+		FROM scans
+		WHERE options_hash = $1 AND status = 'done' AND id <> $2
+		ORDER BY finished_at DESC LIMIT 1`,
+		optionsHash, excludeID,
+	).Scan(
+		&sc.ID, &sc.UserID, &sc.Target, &sc.OptionsHash, &sc.Only200, &sc.SearchBing,
+		&sc.Status, &sc.DurationSeconds, &sc.TotalPaths, &sc.Status200, &sc.OtherStatus,
+		&sc.Errors, &sc.ErrorMessage, &sc.CreatedAt, &sc.StartedAt, &sc.FinishedAt, &sc.Trigger,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Scan{}, ErrNotFound
+	}
+	return sc, err
 }
 
 // GetScan loads a single scan by id. Returns ErrNotFound if missing.
@@ -26,12 +56,14 @@ func (s *Store) GetScan(ctx context.Context, id string) (Scan, error) {
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, user_id, target, options_hash, only200, search_bing, status,
 		       COALESCE(duration_seconds, 0), total_paths, status_200, other_status,
-		       errors, COALESCE(error_message, ''), created_at, started_at, finished_at
+		       errors, COALESCE(error_message, ''), created_at, started_at, finished_at,
+		       schedule_id, COALESCE(trigger, 'manual')
 		FROM scans WHERE id = $1`, id,
 	).Scan(
 		&sc.ID, &sc.UserID, &sc.Target, &sc.OptionsHash, &sc.Only200, &sc.SearchBing,
 		&sc.Status, &sc.DurationSeconds, &sc.TotalPaths, &sc.Status200, &sc.OtherStatus,
 		&sc.Errors, &sc.ErrorMessage, &sc.CreatedAt, &sc.StartedAt, &sc.FinishedAt,
+		&sc.ScheduleID, &sc.Trigger,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Scan{}, ErrNotFound

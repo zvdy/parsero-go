@@ -13,6 +13,22 @@
   </section>
 
   <section class="card">
+    <h2>Recurring monitors</h2>
+    <p class="muted">Schedule periodic re-scans; get a webhook alert when a
+      <code>Disallow</code> path becomes reachable.</p>
+    <form hx-post="/ui/schedules" hx-target="#monitors" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful) this.reset()" class="scan-form">
+      <input type="text" name="target" placeholder="example.com" required>
+      <input type="text" name="cron" placeholder="cron, e.g. @daily or 0 * * * *" required>
+      <input type="url" name="notify_webhook" placeholder="https://hooks.slack.com/… (optional)">
+      <label class="check"><input type="checkbox" name="notify_on_change" checked> Only on change</label>
+      <button type="submit">Add monitor</button>
+    </form>
+    <div id="submit-error-sched" class="error-slot"></div>
+    <div id="monitors">{{template "monitors" .}}</div>
+  </section>
+
+  <section class="card">
     <h2>Recent scans</h2>
     {{template "history" .}}
   </section>

@@ -18,6 +18,7 @@ import (
 	"github.com/zvdy/parsero-go/internal/config"
 	"github.com/zvdy/parsero-go/internal/jobs"
 	"github.com/zvdy/parsero-go/internal/queue"
+	"github.com/zvdy/parsero-go/internal/scheduler"
 	"github.com/zvdy/parsero-go/internal/server"
 	"github.com/zvdy/parsero-go/internal/store"
 )
@@ -59,18 +60,45 @@ func run() error {
 	qClient := queue.NewClient(c.Client())
 	defer qClient.Close()
 
-	// Worker: process scan jobs in-process.
 	instance, _ := os.Hostname()
-	proc := jobs.New(st, c, cfg, instance)
-	worker := queue.NewWorker(c.Client(), cfg.WorkerCount)
-	go func() {
-		if err := worker.Run(ctx, proc.Handle); err != nil {
-			log.Printf("worker stopped: %v", err)
-		}
-	}()
-	log.Printf("worker started (concurrency=%d)", cfg.WorkerCount)
+	log.Printf("starting role=%s", cfg.Role)
 
-	// HTTP server.
+	// Worker tier: process scan jobs + run scheduled scans.
+	if cfg.RunsWorker() {
+		proc := jobs.New(st, c, qClient, cfg, instance)
+		worker := queue.NewWorker(c.Client(), cfg.WorkerCount)
+		worker.HandleScan(proc.Handle)
+		worker.HandleScheduled(proc.HandleScheduled)
+		go func() {
+			if err := worker.Run(ctx); err != nil {
+				log.Printf("worker stopped: %v", err)
+			}
+		}()
+		log.Printf("worker started (concurrency=%d)", cfg.WorkerCount)
+
+		// Scheduler: turn DB schedules into periodic tasks. asynq.Unique guards
+		// against duplicate ticks if more than one instance runs it.
+		if cfg.SchedulerEnabled {
+			sched, err := queue.NewScheduler(c.Client(), scheduler.NewProvider(st), cfg.SchedulerSync)
+			if err != nil {
+				return err
+			}
+			go func() {
+				if err := sched.Run(ctx); err != nil {
+					log.Printf("scheduler stopped: %v", err)
+				}
+			}()
+			log.Println("scheduler started")
+		}
+	}
+
+	// Web tier: HTTP server. A worker-only instance just blocks on ctx.
+	if !cfg.RunsWeb() {
+		log.Println("worker-only instance; not serving HTTP")
+		<-ctx.Done()
+		return nil
+	}
+
 	srv, err := server.New(cfg, st, c, qClient)
 	if err != nil {
 		return err

@@ -114,4 +114,14 @@ a { color: var(--accent); }
   font-size: 14px;
 }
 
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+}
+.link-btn:hover { text-decoration: underline; }
+
 .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; }

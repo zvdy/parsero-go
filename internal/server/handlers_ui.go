@@ -16,13 +16,15 @@ type uiResult struct {
 	OK     bool // true when status code is 200 (green styling)
 }
 
-// handleIndex renders the landing page with the user's recent scans.
+// handleIndex renders the landing page with the user's recent scans + monitors.
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	scans, _ := s.store.ListScansByUser(r.Context(), identity(r), 20)
+	schedules, _ := s.store.ListSchedulesByUser(r.Context(), identity(r))
 	s.render(w, "index", map[string]any{
 		"Identity":    identity(r),
 		"BingEnabled": s.cfg.BingEnabled,
 		"Scans":       scans,
+		"Schedules":   schedules,
 	})
 }
 

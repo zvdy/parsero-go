@@ -1,0 +1,4 @@
+DROP INDEX IF EXISTS idx_scans_schedule;
+ALTER TABLE scans DROP COLUMN IF EXISTS trigger;
+ALTER TABLE scans DROP COLUMN IF EXISTS schedule_id;
+DROP TABLE IF EXISTS schedules;

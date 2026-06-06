@@ -66,7 +66,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/scans", s.handleListScans)
 	mux.HandleFunc("GET /api/scans/{id}", s.handleGetScan)
 	mux.HandleFunc("GET /api/scans/{id}/results", s.handleGetResults)
+	mux.HandleFunc("GET /api/scans/{id}/sarif", s.handleGetSARIF)
 	mux.HandleFunc("GET /api/scans/{id}/events", s.handleEvents)
+
+	// Schedules (recurring monitors).
+	mux.HandleFunc("POST /api/schedules", s.handleCreateSchedule)
+	mux.HandleFunc("GET /api/schedules", s.handleListSchedules)
+	mux.HandleFunc("DELETE /api/schedules/{id}", s.handleDeleteSchedule)
+	mux.HandleFunc("POST /api/schedules/{id}/enable", s.handleEnableSchedule)
+	mux.HandleFunc("POST /api/schedules/{id}/disable", s.handleDisableSchedule)
 
 	// Health.
 	mux.HandleFunc("GET /healthz", s.handleHealth)
@@ -77,6 +85,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /scan/{id}", s.handleScanPage)
 	mux.HandleFunc("GET /ui/scans/{id}/status", s.handleUIStatus)
 	mux.HandleFunc("GET /ui/scans/{id}/results", s.handleUIResults)
+	mux.HandleFunc("POST /ui/schedules", s.handleUIScheduleSubmit)
+	mux.HandleFunc("DELETE /ui/schedules/{id}", s.handleUIScheduleDelete)
 
 	// Middleware chain: logging -> identity -> rate limit.
 	return s.withLogging(s.withIdentity(s.withRateLimit(mux)))

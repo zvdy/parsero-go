@@ -109,6 +109,8 @@ type Scan struct {
 	CreatedAt       time.Time
 	StartedAt       *time.Time
 	FinishedAt      *time.Time
+	ScheduleID      *string
+	Trigger         string
 }
 
 // ResultRow is a single probed path belonging to a scan.

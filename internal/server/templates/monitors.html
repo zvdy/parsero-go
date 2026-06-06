@@ -1,0 +1,25 @@
+{{define "monitors"}}
+  {{if .Schedules}}
+  <table class="history">
+    <thead><tr><th>Target</th><th>Cron</th><th>State</th><th>Alerts</th><th>Last run</th><th></th></tr></thead>
+    <tbody>
+      {{range .Schedules}}
+      <tr>
+        <td>{{.Target}}</td>
+        <td><code>{{.Cron}}</code></td>
+        <td><span class="badge {{if .Enabled}}badge-done{{else}}badge-queued{{end}}">{{if .Enabled}}on{{else}}off{{end}}</span></td>
+        <td class="muted">{{if .NotifyWebhook}}webhook{{else}}—{{end}}</td>
+        <td class="muted">{{if .LastRunAt}}{{.LastRunAt.Format "2006-01-02 15:04"}}{{else}}never{{end}}</td>
+        <td>
+          <button class="link-btn" hx-delete="/ui/schedules/{{.ID}}"
+                  hx-target="#monitors" hx-swap="innerHTML"
+                  hx-confirm="Delete this monitor?">delete</button>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="muted">No monitors yet.</p>
+  {{end}}
+{{end}}
