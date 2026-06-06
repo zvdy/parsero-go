@@ -7,5 +7,13 @@
 # Node (screenshot tooling uses a global Playwright; ignore any local install)
 node_modules/
 
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+.terraform.lock.hcl
+
 # Local env
 .env
