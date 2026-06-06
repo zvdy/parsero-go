@@ -40,10 +40,14 @@ services:
       # In production the reverse proxy authenticates and injects this header;
       # for local dev, requests without it fall back to the client IP.
       IDENTITY_HEADER: "X-Auth-Request-Email"
-      BING_ENABLED: "false"
-      MAX_PER_USER: "2"
-      MAX_INFLIGHT: "50"
-      MAX_QUEUE_DEPTH: "100"
+      # Throttle/limit knobs are overridable from the environment (with sane
+      # defaults) so CI can relax them when seeding demo data.
+      BING_ENABLED: "${BING_ENABLED:-false}"
+      MAX_PER_USER: "${MAX_PER_USER:-2}"
+      MAX_INFLIGHT: "${MAX_INFLIGHT:-50}"
+      MAX_QUEUE_DEPTH: "${MAX_QUEUE_DEPTH:-100}"
+      RATE_LIMIT_RPS: "${RATE_LIMIT_RPS:-5}"
+      RATE_LIMIT_BURST: "${RATE_LIMIT_BURST:-10}"
     ports:
       - "8080:8080"
     depends_on:

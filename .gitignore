@@ -1,0 +1,11 @@
+# Go build artifacts
+/parsero
+/parserod
+*.test
+*.out
+
+# Node (screenshot tooling uses a global Playwright; ignore any local install)
+node_modules/
+
+# Local env
+.env

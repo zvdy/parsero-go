@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: build · vet · test
+    runs-on: ubuntu-latest
+    # Postgres + Redis are available for any integration tests; unit tests don't
+    # need them but the service containers make the suite future-proof.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: parsero
+          POSTGRES_PASSWORD: parsero
+          POSTGRES_DB: parsero
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U parsero"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://parsero:parsero@localhost:5432/parsero?sslmode=disable
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { echo 'Run gofmt:'; gofmt -l .; exit 1; }
+      - name: go vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      - name: test
+        run: go test -race ./...
+
+  docker:
+    name: docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build server image (parserod)
+        run: docker build --build-arg TARGET=parserod -t parserod:ci .
+      - name: Build CLI image (parsero)
+        run: docker build --build-arg TARGET=parsero -t parsero:ci .
+      - name: Smoke-test CLI image
+        run: docker run --rm parsero:ci --help

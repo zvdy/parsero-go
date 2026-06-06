@@ -1,0 +1,77 @@
+name: Screenshots
+
+# Brings up the full container stack (postgres + redis + app), seeds demo scans,
+# and captures the UI screenshots with Playwright — exactly how the README images
+# are produced. Uploaded as a build artifact so they can be reviewed/refreshed.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "internal/server/**"
+      - "scripts/screenshots.mjs"
+      - "scripts/seed-demo.sh"
+      - "docker-compose.yml"
+      - ".github/workflows/screenshots.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    name: capture UI screenshots
+    runs-on: ubuntu-latest
+    env:
+      # Relax throttling/rate limits so seeding several demo scans succeeds.
+      MAX_PER_USER: "10"
+      RATE_LIMIT_RPS: "50"
+      RATE_LIMIT_BURST: "100"
+      BASE_URL: http://localhost:8080
+      IDENTITY: demo@parsero.dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring up the stack
+        run: docker compose up -d --build
+
+      - name: Wait for the app to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS "$BASE_URL/healthz" >/dev/null 2>&1; then
+              echo "app is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "app did not become healthy"; docker compose logs app; exit 1
+
+      - name: Seed demo scans
+        id: seed
+        run: |
+          SID=$(./scripts/seed-demo.sh)
+          echo "scan_id=$SID" >> "$GITHUB_OUTPUT"
+          echo "results scan id: $SID"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Playwright (chromium)
+        run: |
+          npm i -g playwright@1.56.1
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+          npx playwright install --with-deps chromium
+
+      - name: Capture screenshots
+        env:
+          RESULTS_SCAN_ID: ${{ steps.seed.outputs.scan_id }}
+          OUT_DIR: assets/screenshots
+        run: node scripts/screenshots.mjs
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: assets/screenshots/*.png
+
+      - name: Dump app logs on failure
+        if: failure()
+        run: docker compose logs

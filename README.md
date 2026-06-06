@@ -163,6 +163,20 @@ In addition to the CLI, parsero ships as a horizontally-scalable web service
 use: scans run as **async jobs** so any instance can process and report them,
 and the engine is fully stateless behind a load balancer.
 
+### Screenshots
+
+| Home — submit a scan & recent history | Live results table |
+|---|---|
+| ![Home](assets/screenshots/home.png) | ![Scan results](assets/screenshots/scan-results.png) |
+
+SSRF guardrails reject internal/private targets before any request is made:
+
+![SSRF blocked](assets/screenshots/ssrf-blocked.png)
+
+> These images are generated from a live instance by
+> [`scripts/screenshots.mjs`](scripts/screenshots.mjs) and refreshed in CI (see
+> the [screenshots workflow](.github/workflows/screenshots.yml)).
+
 ### Architecture
 
 ```
