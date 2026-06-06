@@ -7,10 +7,8 @@ import (
 	"time"
 )
 
-// handleEvents streams scan progress as Server-Sent Events. Progress is read
-// from Redis, so the stream works no matter which instance ran the job. It emits
-// `progress` events until the scan reaches a terminal state, then a final
-// `done` or `failed` event and closes.
+// handleEvents streams progress as SSE. Progress comes from Redis, so the stream
+// works regardless of which instance ran the job.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	sc, err := s.loadOwnedScan(r)
 	if err != nil {

@@ -18,12 +18,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Cache wraps a Redis client.
 type Cache struct {
 	rdb *redis.Client
 }
 
-// New connects to Redis using a redis:// URL.
 func New(ctx context.Context, redisURL string) (*Cache, error) {
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
@@ -36,22 +34,19 @@ func New(ctx context.Context, redisURL string) (*Cache, error) {
 	return &Cache{rdb: rdb}, nil
 }
 
-// Client exposes the underlying redis client (used to build the asynq options).
+// Client is shared with the asynq queue/scheduler.
 func (c *Cache) Client() *redis.Client { return c.rdb }
 
-// Close closes the Redis connection.
 func (c *Cache) Close() error { return c.rdb.Close() }
 
 // --- Result cache (options_hash -> scan id) ---
 
 func scanKey(hash string) string { return "cache:scan:" + hash }
 
-// PutScanID caches the scan id for an options hash with the given TTL.
 func (c *Cache) PutScanID(ctx context.Context, optionsHash, scanID string, ttl time.Duration) error {
 	return c.rdb.Set(ctx, scanKey(optionsHash), scanID, ttl).Err()
 }
 
-// GetScanID returns a cached scan id and whether it was present.
 func (c *Cache) GetScanID(ctx context.Context, optionsHash string) (string, bool, error) {
 	v, err := c.rdb.Get(ctx, scanKey(optionsHash)).Result()
 	if err == redis.Nil {
@@ -67,7 +62,6 @@ func (c *Cache) GetScanID(ctx context.Context, optionsHash string) (string, bool
 
 func robotsKey(target string) string { return "cache:robots:" + target }
 
-// GetRobots returns cached disallow paths for a target.
 func (c *Cache) GetRobots(ctx context.Context, target string) ([]string, bool) {
 	v, err := c.rdb.Get(ctx, robotsKey(target)).Bytes()
 	if err != nil {
@@ -80,7 +74,6 @@ func (c *Cache) GetRobots(ctx context.Context, target string) ([]string, bool) {
 	return paths, true
 }
 
-// SetRobots caches disallow paths for a target with the configured TTL.
 func (c *Cache) SetRobots(ctx context.Context, target string, paths []string, ttl time.Duration) {
 	b, err := json.Marshal(paths)
 	if err == nil {
@@ -92,14 +85,12 @@ func (c *Cache) SetRobots(ctx context.Context, target string, paths []string, tt
 
 func progressKey(scanID string) string { return "progress:" + scanID }
 
-// SetProgress records done/total for a running scan so any instance's SSE
-// handler can report it. Short TTL keeps stale keys from accumulating.
+// SetProgress publishes scan progress so any instance's SSE handler can read it.
 func (c *Cache) SetProgress(ctx context.Context, scanID string, done, total int) {
 	c.rdb.HSet(ctx, progressKey(scanID), "done", done, "total", total)
 	c.rdb.Expire(ctx, progressKey(scanID), 15*time.Minute)
 }
 
-// GetProgress reads done/total for a scan; ok is false if no progress recorded.
 func (c *Cache) GetProgress(ctx context.Context, scanID string) (done, total int, ok bool) {
 	m, err := c.rdb.HGetAll(ctx, progressKey(scanID)).Result()
 	if err != nil || len(m) == 0 {

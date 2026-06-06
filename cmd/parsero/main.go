@@ -160,9 +160,8 @@ func main() {
 	}
 }
 
-// printResults renders scan results to stdout with the original green/red
-// semantics: 200s in green, everything else in red unless only200 is set.
-// Errored probes are skipped silently, matching prior behavior.
+// printResults keeps the original CLI output: 200s green, others red unless
+// only200, errors skipped.
 func printResults(results []types.Result, only200 bool) {
 	for _, r := range results {
 		if r.Error != nil {
@@ -180,7 +179,6 @@ func printResults(results []types.Result, only200 bool) {
 	}
 }
 
-// printDate prints the scan banner, preserving the original CLI output.
 func printDate(url string) {
 	fmt.Println("Starting Parsero v2.0.0 (https://github.com/zvdy/parsero-go) at " + time.Now().Format("01/02/2006 15:04:05"))
 	fmt.Println("Parsero scan report for " + url)

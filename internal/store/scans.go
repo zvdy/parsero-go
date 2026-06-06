@@ -8,8 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// CreateScan inserts a new queued scan and returns its generated id. Trigger
-// defaults to "manual"; ScheduleID links the scan to a recurring monitor.
 func (s *Store) CreateScan(ctx context.Context, sc Scan) (string, error) {
 	trigger := sc.Trigger
 	if trigger == "" {
@@ -25,9 +23,8 @@ func (s *Store) CreateScan(ctx context.Context, sc Scan) (string, error) {
 	return id, err
 }
 
-// PreviousDoneScan returns the most recent completed scan with the same
-// options_hash, excluding excludeID. Used to diff a fresh scan against the prior
-// state of the same target. Returns ErrNotFound when there's no prior scan.
+// PreviousDoneScan returns the prior completed scan for the same options_hash
+// (excluding excludeID), for diffing. ErrNotFound when there's no prior scan.
 func (s *Store) PreviousDoneScan(ctx context.Context, optionsHash, excludeID string) (Scan, error) {
 	var sc Scan
 	err := s.pool.QueryRow(ctx, `
@@ -50,7 +47,6 @@ func (s *Store) PreviousDoneScan(ctx context.Context, optionsHash, excludeID str
 	return sc, err
 }
 
-// GetScan loads a single scan by id. Returns ErrNotFound if missing.
 func (s *Store) GetScan(ctx context.Context, id string) (Scan, error) {
 	var sc Scan
 	err := s.pool.QueryRow(ctx, `
@@ -71,7 +67,6 @@ func (s *Store) GetScan(ctx context.Context, id string) (Scan, error) {
 	return sc, err
 }
 
-// ListScansByUser returns a user's scans, newest first, up to limit.
 func (s *Store) ListScansByUser(ctx context.Context, userID string, limit int) ([]Scan, error) {
 	if limit <= 0 {
 		limit = 50
@@ -101,9 +96,8 @@ func (s *Store) ListScansByUser(ctx context.Context, userID string, limit int) (
 	return out, rows.Err()
 }
 
-// FindCachedScan returns the newest completed scan with the given options_hash
-// finished within ttl. Returns ErrNotFound when there's no fresh hit. Used as
-// the Postgres fallback when the Redis cache misses.
+// FindCachedScan is the Postgres fallback for the Redis result cache: the newest
+// done scan for options_hash finished within ttl, else ErrNotFound.
 func (s *Store) FindCachedScan(ctx context.Context, optionsHash string, ttl time.Duration) (Scan, error) {
 	var sc Scan
 	err := s.pool.QueryRow(ctx, `
@@ -125,7 +119,6 @@ func (s *Store) FindCachedScan(ctx context.Context, optionsHash string, ttl time
 	return sc, err
 }
 
-// MarkRunning transitions a scan to running and stamps started_at + locker.
 func (s *Store) MarkRunning(ctx context.Context, id, lockedBy string) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE scans
@@ -135,7 +128,6 @@ func (s *Store) MarkRunning(ctx context.Context, id, lockedBy string) error {
 	return err
 }
 
-// CompleteScan stores the summary and marks the scan done.
 func (s *Store) CompleteScan(ctx context.Context, id string, sc Scan) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE scans
@@ -146,7 +138,6 @@ func (s *Store) CompleteScan(ctx context.Context, id string, sc Scan) error {
 	return err
 }
 
-// FailScan marks the scan failed with an error message.
 func (s *Store) FailScan(ctx context.Context, id, msg string) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE scans

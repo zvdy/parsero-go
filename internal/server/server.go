@@ -20,7 +20,6 @@ var templatesFS embed.FS
 //go:embed static/*
 var staticFS embed.FS
 
-// Server bundles the dependencies shared by all handlers.
 type Server struct {
 	cfg       config.Config
 	store     *store.Store
@@ -30,7 +29,6 @@ type Server struct {
 	limiter   *rateLimiter
 }
 
-// New constructs a Server and parses the embedded templates.
 func New(cfg config.Config, st *store.Store, c *cache.Cache, q *queue.Client) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
 		"statusClass": scanStatusClass,
@@ -54,14 +52,11 @@ func New(cfg config.Config, st *store.Store, c *cache.Cache, q *queue.Client) (*
 	}, nil
 }
 
-// Handler builds the HTTP handler with all routes and middleware applied.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// Static assets.
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 
-	// REST API.
 	mux.HandleFunc("POST /api/scans", s.handleCreateScan)
 	mux.HandleFunc("GET /api/scans", s.handleListScans)
 	mux.HandleFunc("GET /api/scans/{id}", s.handleGetScan)
@@ -69,17 +64,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/scans/{id}/sarif", s.handleGetSARIF)
 	mux.HandleFunc("GET /api/scans/{id}/events", s.handleEvents)
 
-	// Schedules (recurring monitors).
 	mux.HandleFunc("POST /api/schedules", s.handleCreateSchedule)
 	mux.HandleFunc("GET /api/schedules", s.handleListSchedules)
 	mux.HandleFunc("DELETE /api/schedules/{id}", s.handleDeleteSchedule)
 	mux.HandleFunc("POST /api/schedules/{id}/enable", s.handleEnableSchedule)
 	mux.HandleFunc("POST /api/schedules/{id}/disable", s.handleDisableSchedule)
 
-	// Health.
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 
-	// HTMX UI.
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("POST /ui/scans", s.handleUISubmit)
 	mux.HandleFunc("GET /scan/{id}", s.handleScanPage)
@@ -88,11 +80,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /ui/schedules", s.handleUIScheduleSubmit)
 	mux.HandleFunc("DELETE /ui/schedules/{id}", s.handleUIScheduleDelete)
 
-	// Middleware chain: logging -> identity -> rate limit.
+	// Order: logging -> identity -> rate limit.
 	return s.withLogging(s.withIdentity(s.withRateLimit(mux)))
 }
 
-// handleHealth is a lightweight readiness probe.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.Pool().Ping(r.Context()); err != nil {
 		http.Error(w, "db unavailable", http.StatusServiceUnavailable)

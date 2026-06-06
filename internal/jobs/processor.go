@@ -19,17 +19,15 @@ import (
 	"github.com/zvdy/parsero-go/pkg/types"
 )
 
-// Processor handles scan tasks.
 type Processor struct {
 	store    *store.Store
 	cache    *cache.Cache
 	queue    *queue.Client
 	notifier *notify.Notifier
 	cfg      config.Config
-	instance string // identifier recorded as locked_by for audit
+	instance string // recorded as locked_by for audit
 }
 
-// New builds a Processor.
 func New(st *store.Store, c *cache.Cache, q *queue.Client, cfg config.Config, instance string) *Processor {
 	return &Processor{
 		store:    st,
@@ -41,9 +39,8 @@ func New(st *store.Store, c *cache.Cache, q *queue.Client, cfg config.Config, in
 	}
 }
 
-// HandleScheduled fires on a schedule's cron tick: it creates a fresh scan
-// (trigger=scheduled, bypassing the result cache so changes are detected) and
-// enqueues it for processing like any other scan.
+// HandleScheduled creates a fresh scan per cron tick — trigger=scheduled,
+// bypassing the result cache so changes are detected — and enqueues it.
 func (p *Processor) HandleScheduled(ctx context.Context, scheduleID string) error {
 	sch, err := p.store.GetSchedule(ctx, scheduleID)
 	if err != nil {
@@ -68,9 +65,8 @@ func (p *Processor) HandleScheduled(ctx context.Context, scheduleID string) erro
 	return p.queue.Enqueue(ctx, id)
 }
 
-// Handle runs a single scan job. It is the asynq Handler. Errors returned here
-// trigger asynq's retry; once retries are exhausted asynq drops the task, so we
-// also persist a failed status for visibility.
+// Handle runs a scan job. A returned error triggers asynq's retry; terminal
+// failures are persisted as 'failed' instead (see fail).
 func (p *Processor) Handle(ctx context.Context, scanID string) (err error) {
 	sc, err := p.store.GetScan(ctx, scanID)
 	if err != nil {
@@ -130,9 +126,8 @@ func (p *Processor) Handle(ctx context.Context, scanID string) (err error) {
 	return nil
 }
 
-// diffAndNotify compares a freshly-completed scheduled scan to the previous run
-// of the same target and, per the schedule's notification settings, posts an
-// alert. Failures here never fail the scan — they're logged best-effort.
+// diffAndNotify alerts on changes vs the previous run, per the schedule's
+// settings. Best-effort: failures here never fail the scan.
 func (p *Processor) diffAndNotify(ctx context.Context, sc store.Scan, results []types.Result) {
 	sch, err := p.store.GetSchedule(ctx, *sc.ScheduleID)
 	if err != nil || sch.NotifyWebhook == "" {
@@ -182,7 +177,6 @@ func probesFromResults(results []types.Result) []diff.Probe {
 	return out
 }
 
-// persist writes per-path results and the scan summary to Postgres.
 func (p *Processor) persist(ctx context.Context, scanID string, sc store.Scan, results []types.Result, dur time.Duration) error {
 	rows := make([]store.ResultRow, 0, len(results))
 	var status200, other, errs int

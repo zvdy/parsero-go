@@ -17,7 +17,6 @@ import (
 	"github.com/zvdy/parsero-go/internal/safety"
 )
 
-// Alert is the generic JSON payload POSTed to a webhook.
 type Alert struct {
 	Event             string   `json:"event"`
 	Target            string   `json:"target"`
@@ -27,15 +26,13 @@ type Alert struct {
 	NoLongerReachable []string `json:"no_longer_reachable,omitempty"`
 }
 
-// Notifier posts alerts to webhooks. Guard is the SSRF check applied to each
-// destination host; it defaults to safety.ResolveAndCheck but is injectable for
-// tests. A zero Notifier is usable.
+// Notifier posts alerts to webhooks. Guard is the per-host SSRF check, injectable
+// for tests; it defaults to safety.ResolveAndCheck.
 type Notifier struct {
 	Client *http.Client
 	Guard  func(ctx context.Context, host string) error
 }
 
-// New returns a Notifier with sane defaults.
 func New() *Notifier {
 	return &Notifier{
 		Client: &http.Client{Timeout: 10 * time.Second},
@@ -43,8 +40,8 @@ func New() *Notifier {
 	}
 }
 
-// Send delivers the alert to webhookURL. It validates the URL and its host
-// before connecting, so a webhook can't be used to reach internal services.
+// Send validates the URL and its host before connecting, so a webhook can't be
+// used to reach internal services.
 func (n *Notifier) Send(ctx context.Context, webhookURL string, alert Alert) error {
 	if webhookURL == "" {
 		return nil
@@ -91,8 +88,6 @@ func (n *Notifier) Send(ctx context.Context, webhookURL string, alert Alert) err
 	return nil
 }
 
-// payloadFor returns a Slack-shaped payload for Slack webhooks, otherwise the
-// generic Alert.
 func payloadFor(u *url.URL, alert Alert) any {
 	if strings.Contains(u.Host, "hooks.slack.com") {
 		return map[string]string{"text": slackText(alert)}

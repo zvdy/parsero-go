@@ -16,9 +16,8 @@ var blockedHosts = map[string]bool{
 	"metadata":                 true,
 }
 
-// NormalizeTarget cleans a user-supplied target into a bare host: it strips any
-// scheme, path, query, and port, lowercases the host, and validates it isn't an
-// obviously unsafe name. It returns the normalized host or an error.
+// NormalizeTarget strips scheme/path/port/userinfo, lowercases the host, and
+// rejects obviously unsafe names. Returns the bare host or an error.
 func NormalizeTarget(raw string) (string, error) {
 	t := strings.TrimSpace(raw)
 	if t == "" {

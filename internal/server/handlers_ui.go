@@ -6,17 +6,15 @@ import (
 	"github.com/zvdy/parsero-go/internal/store"
 )
 
-// uiResult is the view model for a row in the results table.
 type uiResult struct {
 	URL    string
 	Code   int
 	Status string
 	Error  string
 	Source string
-	OK     bool // true when status code is 200 (green styling)
+	OK     bool
 }
 
-// handleIndex renders the landing page with the user's recent scans + monitors.
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	scans, _ := s.store.ListScansByUser(r.Context(), identity(r), 20)
 	schedules, _ := s.store.ListSchedulesByUser(r.Context(), identity(r))
@@ -28,8 +26,6 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleUISubmit handles the HTMX form post. On success it asks HTMX to redirect
-// the browser to the scan page; on error it returns an inline error fragment.
 func (s *Server) handleUISubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderError(w, http.StatusBadRequest, "invalid form")
@@ -42,18 +38,14 @@ func (s *Server) handleUISubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	sc, _, _, msg := s.submitScan(r.Context(), identity(r), req)
 	if msg != "" {
-		// Render the inline error fragment with 200 so HTMX swaps it in (it
-		// ignores non-2xx bodies by default). The REST API still returns proper
-		// status codes; this is purely a UI affordance.
+		// 200 so HTMX swaps the fragment in — it ignores non-2xx bodies.
 		s.render(w, "error", map[string]any{"Message": msg})
 		return
 	}
-	// HTMX redirect to the live scan page.
 	w.Header().Set("HX-Redirect", "/scan/"+sc.ID)
 	w.WriteHeader(http.StatusOK)
 }
 
-// handleScanPage renders the live scan view.
 func (s *Server) handleScanPage(w http.ResponseWriter, r *http.Request) {
 	sc, err := s.loadOwnedScan(r)
 	if err != nil {
@@ -66,7 +58,6 @@ func (s *Server) handleScanPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleUIStatus returns the status partial (polling fallback for SSE).
 func (s *Server) handleUIStatus(w http.ResponseWriter, r *http.Request) {
 	sc, err := s.loadOwnedScan(r)
 	if err != nil {
@@ -74,7 +65,7 @@ func (s *Server) handleUIStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	done, total, _ := s.cache.GetProgress(r.Context(), sc.ID)
-	// When finished, tell HTMX to stop polling by sending the terminal header.
+	// Tell HTMX to stop polling once terminal.
 	if sc.Status == "done" || sc.Status == "failed" {
 		w.Header().Set("HX-Trigger", "scan-finished")
 	}
@@ -83,7 +74,6 @@ func (s *Server) handleUIStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleUIResults returns the results table partial.
 func (s *Server) handleUIResults(w http.ResponseWriter, r *http.Request) {
 	sc, err := s.loadOwnedScan(r)
 	if err != nil {
@@ -103,7 +93,6 @@ func (s *Server) handleUIResults(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// render executes a named template, writing a 500 on failure.
 func (s *Server) render(w http.ResponseWriter, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
@@ -111,14 +100,12 @@ func (s *Server) render(w http.ResponseWriter, name string, data any) {
 	}
 }
 
-// renderError writes the error partial with the given status code.
 func (s *Server) renderError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
 	_ = s.templates.ExecuteTemplate(w, "error", map[string]any{"Message": msg})
 }
 
-// scanStatusClass maps a scan status to a CSS badge class (used by templates).
 func scanStatusClass(sc store.Scan) string {
 	switch sc.Status {
 	case "done":

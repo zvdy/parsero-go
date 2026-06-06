@@ -124,5 +124,4 @@ func run() error {
 	return nil
 }
 
-// announce formats the listen address from a port.
 func announce(port string) string { return ":" + port }

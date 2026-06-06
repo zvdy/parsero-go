@@ -6,28 +6,21 @@ package diff
 
 import "sort"
 
-// Probe is the minimal view of a probed path the diff needs.
 type Probe struct {
 	URL        string
 	StatusCode int
 }
 
-// Result holds the computed differences between a previous and current scan.
 type Result struct {
-	// NewlyReachable are URLs returning 200 now that were not 200 before
-	// (either absent or a non-200 status previously). This is the alertable set.
-	NewlyReachable []string
-	// NoLongerReachable are URLs that were 200 before but are not 200 now.
-	NoLongerReachable []string
+	NewlyReachable    []string // 200 now, wasn't before — the alertable set
+	NoLongerReachable []string // 200 before, isn't now
 }
 
-// HasChanges reports whether anything security-relevant changed.
 func (r Result) HasChanges() bool {
 	return len(r.NewlyReachable) > 0 || len(r.NoLongerReachable) > 0
 }
 
-// Compute diffs the 200-reachable sets of prev and cur. URLs are de-duplicated
-// and the result slices are sorted for stable output/notifications.
+// Compute diffs the 200-reachable sets of prev and cur; output is sorted.
 func Compute(prev, cur []Probe) Result {
 	prevOK := reachableSet(prev)
 	curOK := reachableSet(cur)

@@ -22,15 +22,12 @@ import (
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
 
-// ErrNotFound is returned when a requested row does not exist.
 var ErrNotFound = errors.New("not found")
 
-// Store wraps a pgx connection pool.
 type Store struct {
 	pool *pgxpool.Pool
 }
 
-// New opens a connection pool to the given Postgres URL.
 func New(ctx context.Context, databaseURL string) (*Store, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
@@ -47,14 +44,12 @@ func New(ctx context.Context, databaseURL string) (*Store, error) {
 	return &Store{pool: pool}, nil
 }
 
-// Close releases the connection pool.
 func (s *Store) Close() { s.pool.Close() }
 
-// Pool exposes the underlying pool for advanced callers (e.g. health checks).
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
-// Migrate applies all embedded up-migrations. golang-migrate holds an advisory
-// lock for the duration, so running this on every instance at startup is safe.
+// Migrate applies embedded up-migrations under an advisory lock, so it's safe to
+// run on every instance at startup.
 func (s *Store) Migrate(databaseURL string) error {
 	src, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
@@ -71,7 +66,7 @@ func (s *Store) Migrate(databaseURL string) error {
 	return nil
 }
 
-// normalizeDSN ensures the URL uses the pgx5 scheme golang-migrate expects.
+// normalizeDSN rewrites the URL to the pgx5 scheme golang-migrate expects.
 func normalizeDSN(url string) string {
 	const pg = "postgres://"
 	const pgql = "postgresql://"
@@ -84,14 +79,12 @@ func normalizeDSN(url string) string {
 	return url
 }
 
-// OptionsHash derives the cache key for a scan request from its target and
-// options. Identical requests share a hash and therefore a cached result.
+// OptionsHash is the cache key for a scan request; identical requests share it.
 func OptionsHash(target string, only200, searchBing bool) string {
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%t|%t", target, only200, searchBing)))
 	return hex.EncodeToString(sum[:])
 }
 
-// Scan is the durable record of a scan request and its summary.
 type Scan struct {
 	ID              string
 	UserID          string
@@ -113,7 +106,6 @@ type Scan struct {
 	Trigger         string
 }
 
-// ResultRow is a single probed path belonging to a scan.
 type ResultRow struct {
 	URL        string
 	StatusCode int

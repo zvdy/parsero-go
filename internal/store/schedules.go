@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Schedule is a recurring scan monitor for a target.
 type Schedule struct {
 	ID             string
 	UserID         string
@@ -24,7 +23,6 @@ type Schedule struct {
 	LastRunAt      *time.Time
 }
 
-// CreateSchedule inserts a new schedule and returns its id.
 func (s *Store) CreateSchedule(ctx context.Context, sc Schedule) (string, error) {
 	var id string
 	err := s.pool.QueryRow(ctx, `
@@ -49,7 +47,6 @@ func scanSchedule(row pgx.Row) (Schedule, error) {
 	return sc, err
 }
 
-// GetSchedule loads a schedule by id.
 func (s *Store) GetSchedule(ctx context.Context, id string) (Schedule, error) {
 	sc, err := scanSchedule(s.pool.QueryRow(ctx, `SELECT `+scheduleCols+` FROM schedules WHERE id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -58,7 +55,6 @@ func (s *Store) GetSchedule(ctx context.Context, id string) (Schedule, error) {
 	return sc, err
 }
 
-// ListSchedulesByUser returns a user's schedules, newest first.
 func (s *Store) ListSchedulesByUser(ctx context.Context, userID string) ([]Schedule, error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+scheduleCols+` FROM schedules WHERE user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
@@ -68,7 +64,6 @@ func (s *Store) ListSchedulesByUser(ctx context.Context, userID string) ([]Sched
 	return collectSchedules(rows)
 }
 
-// ListEnabledSchedules returns all enabled schedules (for the scheduler).
 func (s *Store) ListEnabledSchedules(ctx context.Context) ([]Schedule, error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+scheduleCols+` FROM schedules WHERE enabled ORDER BY created_at`)
 	if err != nil {
@@ -90,7 +85,6 @@ func collectSchedules(rows pgx.Rows) ([]Schedule, error) {
 	return out, rows.Err()
 }
 
-// SetScheduleEnabled toggles a schedule on or off, scoped to its owner.
 func (s *Store) SetScheduleEnabled(ctx context.Context, id, userID string, enabled bool) error {
 	tag, err := s.pool.Exec(ctx, `UPDATE schedules SET enabled = $3 WHERE id = $1 AND user_id = $2`, id, userID, enabled)
 	if err != nil {
@@ -102,13 +96,11 @@ func (s *Store) SetScheduleEnabled(ctx context.Context, id, userID string, enabl
 	return nil
 }
 
-// MarkScheduleRun stamps last_run_at = now() for a schedule.
 func (s *Store) MarkScheduleRun(ctx context.Context, id string) error {
 	_, err := s.pool.Exec(ctx, `UPDATE schedules SET last_run_at = now() WHERE id = $1`, id)
 	return err
 }
 
-// DeleteSchedule removes a schedule owned by userID.
 func (s *Store) DeleteSchedule(ctx context.Context, id, userID string) error {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM schedules WHERE id = $1 AND user_id = $2`, id, userID)
 	if err != nil {

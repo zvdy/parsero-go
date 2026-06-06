@@ -11,13 +11,10 @@ import (
 	"github.com/zvdy/parsero-go/pkg/types"
 )
 
-// ErrNoRobots is returned by FetchDisallowPaths when robots.txt can't be fetched.
 var ErrNoRobots = fmt.Errorf("no robots.txt file has been found")
 
-// FetchDisallowPaths fetches http://{target}/robots.txt and returns the list of
-// Disallow paths (with the leading slash stripped, matching the original tool).
-// The list is returned rather than stored in a global, so concurrent scans never
-// interfere. Honors ctx and the MaxPaths cap.
+// FetchDisallowPaths returns the Disallow paths from http://{target}/robots.txt
+// with the leading slash stripped, honoring ctx and the MaxPaths cap.
 func (s *Scanner) FetchDisallowPaths(ctx context.Context, target string) ([]string, error) {
 	if s.robotsCache != nil {
 		if paths, ok := s.robotsCache.GetRobots(ctx, target); ok {
@@ -60,9 +57,8 @@ func (s *Scanner) FetchDisallowPaths(ctx context.Context, target string) ([]stri
 	return paths, nil
 }
 
-// CheckPaths probes each disallow path on target using a bounded worker pool,
-// trying HEAD first and falling back to GET. It never prints; per-path errors
-// are returned inside the results. Results are tagged with SourceRobots.
+// CheckPaths probes each path with a bounded worker pool; per-path errors are
+// returned inside the results.
 func (s *Scanner) CheckPaths(ctx context.Context, target string, paths []string) []types.Result {
 	if len(paths) == 0 {
 		return nil
@@ -106,7 +102,6 @@ func (s *Scanner) CheckPaths(ctx context.Context, target string, paths []string)
 	return results
 }
 
-// probe issues a HEAD (falling back to GET) for a single disallow path.
 func (s *Scanner) probe(ctx context.Context, target, path string) types.Result {
 	disurl := "http://" + target + "/" + path
 

@@ -16,10 +16,8 @@ type ctxKey string
 
 const identityKey ctxKey = "identity"
 
-// withIdentity extracts the caller identity from the trusted auth header
-// injected by the upstream reverse proxy (oauth2-proxy / forward-auth). When the
-// header is absent (e.g. local dev) it falls back to the client IP so the service
-// still works, but in production the proxy is responsible for authn.
+// withIdentity trusts the auth header injected by the upstream proxy, falling
+// back to client IP for local dev. The proxy owns authn in production.
 func (s *Server) withIdentity(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(s.cfg.IdentityHeader)
@@ -31,7 +29,6 @@ func (s *Server) withIdentity(next http.Handler) http.Handler {
 	})
 }
 
-// identity returns the caller identity stored by withIdentity.
 func identity(r *http.Request) string {
 	if v, ok := r.Context().Value(identityKey).(string); ok {
 		return v
@@ -39,7 +36,6 @@ func identity(r *http.Request) string {
 	return clientIP(r)
 }
 
-// clientIP best-effort extracts the client IP, honoring X-Forwarded-For.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		first, _, _ := strings.Cut(xff, ",")
@@ -52,9 +48,8 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// rateLimiter holds a token-bucket limiter per identity. This is per-instance;
-// strict global limits would need a Redis token bucket, but per-instance limits
-// are a reasonable first guard against abuse.
+// rateLimiter is a per-identity token bucket. Per-instance only — strict global
+// limits would need a Redis token bucket.
 type rateLimiter struct {
 	mu       sync.Mutex
 	limiters map[string]*rate.Limiter
@@ -81,7 +76,6 @@ func (rl *rateLimiter) get(id string) *rate.Limiter {
 	return l
 }
 
-// withRateLimit rejects requests that exceed the per-identity rate.
 func (s *Server) withRateLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.limiter.get(identity(r)).Allow() {
@@ -92,7 +86,6 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 	})
 }
 
-// statusRecorder captures the response status for logging.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -103,15 +96,13 @@ func (sr *statusRecorder) WriteHeader(code int) {
 	sr.ResponseWriter.WriteHeader(code)
 }
 
-// Flush implements http.Flusher so SSE streaming keeps working through the
-// wrapped ResponseWriter.
+// Flush keeps SSE streaming working through the wrapped ResponseWriter.
 func (sr *statusRecorder) Flush() {
 	if f, ok := sr.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
 }
 
-// withLogging logs each request with method, path, status, and duration.
 func (s *Server) withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

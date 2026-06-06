@@ -34,21 +34,15 @@ type Config struct {
 	DefaultConcurrency int
 	BingEnabled        bool
 
-	// Role selects what this instance runs: "web" (HTTP only), "worker" (job
-	// processing + scheduler only), or "all" (both). Splitting roles lets the
-	// web tier and worker tier scale independently (see the Helm chart).
+	// Role is "web", "worker", or "all" — splitting lets the tiers scale apart.
 	Role             string
-	SchedulerEnabled bool          // run the periodic-scan scheduler on this instance
-	SchedulerSync    time.Duration // how often the scheduler re-reads schedules from the DB
+	SchedulerEnabled bool
+	SchedulerSync    time.Duration
 }
 
-// RunsWeb reports whether this instance should serve HTTP.
-func (c Config) RunsWeb() bool { return c.Role == "web" || c.Role == "all" }
-
-// RunsWorker reports whether this instance should process jobs.
+func (c Config) RunsWeb() bool    { return c.Role == "web" || c.Role == "all" }
 func (c Config) RunsWorker() bool { return c.Role == "worker" || c.Role == "all" }
 
-// Load reads configuration from the environment.
 func Load() (Config, error) {
 	c := Config{
 		Port:               getStr("PORT", "8080"),

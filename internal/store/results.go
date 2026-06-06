@@ -6,7 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// InsertResults bulk-inserts per-path results for a scan using a single COPY.
+// InsertResults bulk-inserts a scan's results with a single COPY.
 func (s *Store) InsertResults(ctx context.Context, scanID string, rows []ResultRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -26,7 +26,6 @@ func (s *Store) InsertResults(ctx context.Context, scanID string, rows []ResultR
 	return err
 }
 
-// ListResults returns all stored results for a scan.
 func (s *Store) ListResults(ctx context.Context, scanID string) ([]ResultRow, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT url, COALESCE(status_code, 0), COALESCE(status, ''),
@@ -48,7 +47,7 @@ func (s *Store) ListResults(ctx context.Context, scanID string) ([]ResultRow, er
 	return out, rows.Err()
 }
 
-// nullify converts an empty string to nil so it stores as SQL NULL.
+// nullify stores an empty string as SQL NULL.
 func nullify(s string) any {
 	if s == "" {
 		return nil

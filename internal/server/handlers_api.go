@@ -12,14 +12,12 @@ import (
 	"github.com/zvdy/parsero-go/internal/store"
 )
 
-// createScanRequest is the POST /api/scans body.
 type createScanRequest struct {
 	Target     string `json:"target"`
 	Only200    bool   `json:"only200"`
 	SearchBing bool   `json:"search_bing"`
 }
 
-// scanResponse is the JSON view of a scan.
 type scanResponse struct {
 	ID              string  `json:"id"`
 	Target          string  `json:"target"`
@@ -64,10 +62,8 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, map[string]string{"error": msg})
 }
 
-// submitScan is the shared core behind the REST and UI submit paths. It
-// normalizes + validates the target, applies cache lookup, enforces throttling,
-// then persists and enqueues. It returns the scan, whether it was a cache hit,
-// an HTTP status code, and an error message (empty on success).
+// submitScan backs both the REST and UI submit paths. Returns the scan, whether
+// it was a cache hit, an HTTP status, and an error message (empty on success).
 func (s *Server) submitScan(ctx context.Context, userID string, req createScanRequest) (store.Scan, bool, int, string) {
 	target, err := safety.NormalizeTarget(req.Target)
 	if err != nil {
@@ -164,7 +160,6 @@ func (s *Server) handleGetScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toScanResponse(sc, false))
 }
 
-// resultResponse is the JSON view of a single probed path.
 type resultResponse struct {
 	URL        string `json:"url"`
 	StatusCode int    `json:"status_code,omitempty"`
@@ -194,8 +189,6 @@ func (s *Server) handleGetResults(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleGetSARIF returns the scan's reachable paths as a SARIF 2.1.0 document,
-// suitable for upload to GitHub code scanning.
 func (s *Server) handleGetSARIF(w http.ResponseWriter, r *http.Request) {
 	sc, err := s.loadOwnedScan(r)
 	if err != nil {
@@ -213,8 +206,7 @@ func (s *Server) handleGetSARIF(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sarif.Build(sc, rows))
 }
 
-// loadOwnedScan fetches the scan named by the {id} path value and verifies the
-// caller owns it, preventing cross-tenant reads.
+// loadOwnedScan rejects cross-tenant reads by checking ownership.
 func (s *Server) loadOwnedScan(r *http.Request) (store.Scan, error) {
 	sc, err := s.store.GetScan(r.Context(), r.PathValue("id"))
 	if err != nil {

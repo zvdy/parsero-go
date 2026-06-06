@@ -16,7 +16,6 @@ const (
 	ruleID  = "exposed-disallow-path"
 )
 
-// Report is the top-level SARIF document.
 type Report struct {
 	Schema  string `json:"$schema"`
 	Version string `json:"version"`
@@ -67,15 +66,14 @@ type artifactLocation struct {
 	URI string `json:"uri"`
 }
 
-// sensitiveMarkers flag paths whose exposure is high-risk.
 var sensitiveMarkers = []string{
 	"admin", "login", "wp-admin", "phpmyadmin", ".git", ".env", "backup",
 	"config", "secret", "private", "password", "db", "sql", "dump", ".ssh",
 	"credential", "token", "api-key", "apikey", "internal",
 }
 
-// Build produces a SARIF report for the reachable (HTTP 200) Disallow paths of a
-// scan. Non-200 results are omitted (only what's actually accessible matters).
+// Build reports only the reachable (HTTP 200) Disallow paths — what's actually
+// accessible is what matters.
 func Build(scan store.Scan, rows []store.ResultRow) Report {
 	var results []result
 	for _, r := range rows {
@@ -112,8 +110,6 @@ func Build(scan store.Scan, rows []store.ResultRow) Report {
 	}
 }
 
-// level returns the SARIF severity for a URL: "error" for sensitive-looking
-// paths, "warning" otherwise.
 func level(url string) string {
 	lower := strings.ToLower(url)
 	for _, m := range sensitiveMarkers {

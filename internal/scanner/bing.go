@@ -11,16 +11,14 @@ import (
 	"github.com/zvdy/parsero-go/pkg/types"
 )
 
-// searchBing discovers indexed disallow paths via Bing and probes the ones that
-// belong to target. It takes the path list as an argument (no global state) and
-// returns results tagged with SourceBing. Errors are swallowed per-path so a
-// flaky search engine never fails the whole scan.
+// searchBing probes target paths that Bing has indexed. Per-path errors are
+// swallowed so a flaky search engine never fails the whole scan.
 func (s *Scanner) searchBing(ctx context.Context, target string, paths []string) []types.Result {
 	if len(paths) == 0 {
 		return nil
 	}
 
-	// Use a smaller pool for search to avoid tripping bot detection.
+	// Smaller pool than path probing to avoid tripping bot detection.
 	concurrency := s.opts.Concurrency / 2
 	if concurrency < 1 {
 		concurrency = 1
@@ -59,7 +57,6 @@ func (s *Scanner) searchBing(ctx context.Context, target string, paths []string)
 	return results
 }
 
-// bingQuery runs a single `site:` Bing query and probes matching cite links.
 func (s *Scanner) bingQuery(ctx context.Context, target, path string, out chan<- types.Result) {
 	disurl := "http://" + target + "/" + path
 	searchURL := "http://www.bing.com/search?q=site:" + disurl
@@ -95,7 +92,6 @@ func (s *Scanner) bingQuery(ctx context.Context, target, path string, out chan<-
 	})
 }
 
-// probeBingHit fetches a URL discovered via Bing and reports its status.
 func (s *Scanner) probeBingHit(ctx context.Context, url string) types.Result {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

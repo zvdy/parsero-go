@@ -41,7 +41,6 @@ var privateBlocks = func() []*net.IPNet {
 	return nets
 }()
 
-// checkIP returns an error if ip falls in any blocked range.
 func checkIP(ip net.IP) error {
 	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
 		ip.IsMulticast() || ip.IsUnspecified() {

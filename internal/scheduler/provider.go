@@ -18,14 +18,12 @@ type Provider struct {
 	store *store.Store
 }
 
-// NewProvider builds a Provider.
 func NewProvider(st *store.Store) *Provider {
 	return &Provider{store: st}
 }
 
-// GetConfigs returns one periodic task per enabled schedule. asynq.Unique
-// collapses duplicate enqueues within the window so multiple scheduler instances
-// can't double-fire a tick.
+// GetConfigs returns one task per enabled schedule. asynq.Unique collapses
+// duplicate ticks so multiple scheduler instances can't double-fire.
 func (p *Provider) GetConfigs() ([]*asynq.PeriodicTaskConfig, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

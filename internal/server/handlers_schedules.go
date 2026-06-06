@@ -13,7 +13,6 @@ import (
 	"github.com/zvdy/parsero-go/internal/store"
 )
 
-// createScheduleRequest is the POST /api/schedules body.
 type createScheduleRequest struct {
 	Target         string `json:"target"`
 	Cron           string `json:"cron"`
@@ -52,8 +51,8 @@ func toScheduleResponse(sc store.Schedule) scheduleResponse {
 // cronParser matches what asynq's scheduler accepts (5-field specs + @descriptors).
 var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 
-// buildSchedule validates a create request and returns a store.Schedule ready to
-// persist. It returns an HTTP status + message on validation failure.
+// buildSchedule validates a request into a store.Schedule, or returns an HTTP
+// status + message on failure.
 func (s *Server) buildSchedule(ctx context.Context, userID string, req createScheduleRequest) (store.Schedule, int, string) {
 	target, err := safety.NormalizeTarget(req.Target)
 	if err != nil {
@@ -147,10 +146,6 @@ func (s *Server) setEnabled(w http.ResponseWriter, r *http.Request, enabled bool
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// --- UI (HTMX) ---
-
-// handleUIScheduleSubmit creates a schedule from the form and returns the updated
-// monitors list partial.
 func (s *Server) handleUIScheduleSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		s.renderError(w, http.StatusBadRequest, "invalid form")
@@ -166,7 +161,7 @@ func (s *Server) handleUIScheduleSubmit(w http.ResponseWriter, r *http.Request) 
 	}
 	sch, _, msg := s.buildSchedule(r.Context(), identity(r), req)
 	if msg != "" {
-		// 200 so HTMX swaps the error fragment in (see handlers_ui.go).
+		// 200 so HTMX swaps the fragment in (see handleUISubmit).
 		s.render(w, "error", map[string]any{"Message": msg})
 		return
 	}
@@ -177,13 +172,11 @@ func (s *Server) handleUIScheduleSubmit(w http.ResponseWriter, r *http.Request) 
 	s.renderMonitors(w, r)
 }
 
-// handleUIScheduleDelete removes a schedule and returns the updated list.
 func (s *Server) handleUIScheduleDelete(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.DeleteSchedule(r.Context(), r.PathValue("id"), identity(r))
 	s.renderMonitors(w, r)
 }
 
-// renderMonitors renders the monitors list partial for the current user.
 func (s *Server) renderMonitors(w http.ResponseWriter, r *http.Request) {
 	schedules, _ := s.store.ListSchedulesByUser(r.Context(), identity(r))
 	s.render(w, "monitors", map[string]any{"Schedules": schedules})

@@ -1,10 +1,6 @@
-// Package scanner is a stateless, context-aware robots.txt audit engine.
-//
-// Unlike the original internal/check + internal/search packages, it holds no
-// package-level mutable state, never writes to stdout, and takes an injected
-// *http.Client so callers (CLI, server jobs) can supply their own transport —
-// e.g. an SSRF-guarded one for the multi-tenant service. This makes it safe to
-// run many concurrent scans for different tenants in the same process.
+// Package scanner is a stateless, context-aware robots.txt audit engine: no
+// package-level state, no stdout, and an injected *http.Client so callers can
+// supply an SSRF-guarded transport for multi-tenant use.
 package scanner
 
 import (
@@ -16,24 +12,21 @@ import (
 	"github.com/zvdy/parsero-go/pkg/types"
 )
 
-// Source values attached to results.
 const (
 	SourceRobots = "robots"
 	SourceBing   = "bing"
 )
 
-// Options controls a single scan run.
 type Options struct {
-	Only200     bool // only retain HTTP 200 results
-	SearchBing  bool // also discover paths via Bing search
-	Concurrency int  // worker pool size for path probing
-	MaxPaths    int  // cap on disallow paths processed (0 = unlimited)
+	Only200     bool
+	SearchBing  bool
+	Concurrency int
+	MaxPaths    int // 0 = unlimited
 
-	RobotsTimeout  time.Duration // per-request timeout for robots.txt fetch
-	RequestTimeout time.Duration // per-request timeout for path probes
+	RobotsTimeout  time.Duration
+	RequestTimeout time.Duration
 }
 
-// withDefaults returns a copy of o with sensible fallbacks applied.
 func (o Options) withDefaults() Options {
 	if o.Concurrency <= 0 {
 		o.Concurrency = runtime.NumCPU()
@@ -47,16 +40,14 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-// RobotsCache is an optional cache for robots.txt disallow paths, letting bursts
-// of scans on the same target skip the robots fetch. Implementations must be safe
-// for concurrent use. A nil cache disables caching.
+// RobotsCache lets bursts of scans on the same target skip the robots fetch.
+// Implementations must be safe for concurrent use; a nil cache disables caching.
 type RobotsCache interface {
 	GetRobots(ctx context.Context, target string) ([]string, bool)
 	SetRobots(ctx context.Context, target string, paths []string, ttl time.Duration)
 }
 
-// Scanner runs robots.txt audits. Construct it with New and reuse it across
-// scans; it carries no per-scan mutable state.
+// Scanner carries no per-scan state and is safe to reuse across scans.
 type Scanner struct {
 	client      *http.Client
 	opts        Options
@@ -65,9 +56,8 @@ type Scanner struct {
 	robotsTTL   time.Duration
 }
 
-// New builds a Scanner. If client is nil a default client is used. The client's
-// Transport is reused for all requests, so callers wanting SSRF protection
-// should inject a guarded transport here.
+// New builds a Scanner. The client's Transport is reused for every request, so
+// callers wanting SSRF protection inject a guarded transport here.
 func New(client *http.Client, opts Options) *Scanner {
 	if client == nil {
 		client = &http.Client{}
@@ -75,22 +65,18 @@ func New(client *http.Client, opts Options) *Scanner {
 	return &Scanner{client: client, opts: opts.withDefaults()}
 }
 
-// SetRobotsCache attaches an optional robots.txt cache with the given TTL.
 func (s *Scanner) SetRobotsCache(c RobotsCache, ttl time.Duration) {
 	s.robotsCache = c
 	s.robotsTTL = ttl
 }
 
-// OnProgress registers a callback invoked as path probes complete. It is called
-// from the result-collecting goroutine; keep it cheap and non-blocking.
 func (s *Scanner) OnProgress(fn func(done, total int)) {
 	s.progress = fn
 }
 
-// Run performs a full scan: fetch robots.txt, probe each disallow path, and
-// optionally augment with Bing search. It returns the probe results, the list
-// of disallow paths discovered, and an error only for fatal failures (e.g. no
-// robots.txt). Per-path errors are reported inside the results slice.
+// Run fetches robots.txt, probes each disallow path, and optionally augments with
+// Bing. err is non-nil only for fatal failures (e.g. no robots.txt); per-path
+// errors live in the results slice.
 func (s *Scanner) Run(ctx context.Context, target string) (results []types.Result, disallow []string, err error) {
 	disallow, err = s.FetchDisallowPaths(ctx, target)
 	if err != nil {
