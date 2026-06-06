@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "parserod.fullname" . }}-worker
+  labels:
+    {{- include "parserod.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  {{- if not .Values.worker.keda.enabled }}
+  replicas: {{ .Values.worker.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "parserod.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "parserod.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: {{ include "parserod.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          image: {{ include "parserod.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: ROLE
+              value: "worker"
+            - name: WORKER_COUNT
+              value: {{ .Values.worker.workerCount | quote }}
+            # The scheduler runs on the worker tier; asynq.Unique de-duplicates
+            # ticks if more than one worker pod runs it.
+            - name: SCHEDULER_ENABLED
+              value: {{ .Values.config.schedulerEnabled | quote }}
+            {{- with .Values.config.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "parserod.fullname" . }}-config
+            - secretRef:
+                name: {{ include "parserod.secretName" . }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
