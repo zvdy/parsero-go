@@ -38,9 +38,12 @@ func (s *Server) handleUISubmit(w http.ResponseWriter, r *http.Request) {
 		Only200:    r.FormValue("only200") == "on",
 		SearchBing: r.FormValue("search_bing") == "on",
 	}
-	sc, _, code, msg := s.submitScan(r.Context(), identity(r), req)
+	sc, _, _, msg := s.submitScan(r.Context(), identity(r), req)
 	if msg != "" {
-		s.renderError(w, code, msg)
+		// Render the inline error fragment with 200 so HTMX swaps it in (it
+		// ignores non-2xx bodies by default). The REST API still returns proper
+		// status codes; this is purely a UI affordance.
+		s.render(w, "error", map[string]any{"Message": msg})
 		return
 	}
 	// HTMX redirect to the live scan page.

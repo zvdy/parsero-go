@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Parsero — robots.txt audit</title>
   <link rel="stylesheet" href="/static/style.css">
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-  <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/sse.js"></script>
+  <!-- Vendored locally so the app is self-contained (no CDN dependency). -->
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/sse.js"></script>
 </head>
 <body>
   <header class="topbar">
