@@ -165,9 +165,14 @@ and the engine is fully stateless behind a load balancer.
 
 ### Screenshots
 
-| Home — submit a scan & recent history | Live results table |
+| Home — scan, monitors & history | Live results table |
 |---|---|
 | ![Home](assets/screenshots/home.png) | ![Scan results](assets/screenshots/scan-results.png) |
+
+Recurring monitors — schedule re-scans and get alerted when a `Disallow` path
+becomes reachable:
+
+![Monitors](assets/screenshots/monitors.png)
 
 SSRF guardrails reject internal/private targets before any request is made:
 

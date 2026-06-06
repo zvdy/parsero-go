@@ -1,8 +1,9 @@
 name: Screenshots
 
-# Brings up the full container stack (postgres + redis + app), seeds demo scans,
-# and captures the UI screenshots with Playwright — exactly how the README images
-# are produced. Uploaded as a build artifact so they can be reviewed/refreshed.
+# Brings up the full container stack (postgres + redis + app), seeds demo scans
+# and a recurring monitor, and captures the UI screenshots (home, monitors,
+# results, SSRF) with Playwright — exactly how the README images are produced.
+# Uploaded as a build artifact so they can be reviewed/refreshed.
 on:
   workflow_dispatch:
   pull_request:
@@ -27,6 +28,8 @@ jobs:
       RATE_LIMIT_BURST: "100"
       BASE_URL: http://localhost:8080
       IDENTITY: demo@parsero.dev
+      # Keep the captured stack deterministic — no scheduled scans firing mid-shot.
+      SCHEDULER_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
 

@@ -48,6 +48,7 @@ services:
       MAX_QUEUE_DEPTH: "${MAX_QUEUE_DEPTH:-100}"
       RATE_LIMIT_RPS: "${RATE_LIMIT_RPS:-5}"
       RATE_LIMIT_BURST: "${RATE_LIMIT_BURST:-10}"
+      SCHEDULER_ENABLED: "${SCHEDULER_ENABLED:-true}"
     ports:
       - "8080:8080"
     depends_on:
