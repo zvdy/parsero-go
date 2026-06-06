@@ -179,14 +179,27 @@ SSRF guardrails reject internal/private targets before any request is made:
 
 ### Architecture
 
-```
-[Browser] → [LB / reverse proxy + oauth2-proxy]  (TLS, auth, injects identity header)
-                 │ many stateless instances
-            [parserod]  ──HTMX UI + REST API──┐
-              │   │ enqueue task   │ read cache │ read/write
-              │ [Redis] queue (asynq) + cache (results/robots) + throttle counters
-              │   │ worker pulls task (bounded concurrency)
-              └─[Postgres]  durable scans + scan_results (source of truth)
+```mermaid
+flowchart TB
+    Browser([Browser])
+    Proxy["LB / reverse proxy + oauth2-proxy<br/>(TLS · auth · injects identity header)"]
+
+    subgraph App["parserod · many stateless instances"]
+        API["HTMX UI + REST API"]
+        Worker["asynq worker<br/>(bounded concurrency)"]
+    end
+
+    Redis[("Redis<br/>queue (asynq) · cache (results/robots) · throttle counters")]
+    Postgres[("Postgres<br/>durable scans + scan_results · source of truth")]
+
+    Browser --> Proxy --> API
+    API -- "enqueue task" --> Redis
+    API -- "read cache" --> Redis
+    Redis -- "deliver task" --> Worker
+    Worker -- "fetch robots.txt / probe paths" --> Targets([Target sites])
+    API -- "read/write" --> Postgres
+    Worker -- "persist results + summary" --> Postgres
+    Worker -- "populate cache + progress" --> Redis
 ```
 
 - **Postgres** is the durable source of truth for scans and per-path results.
