@@ -1,0 +1,103 @@
+# Default values for parserod.
+# The chart runs the web tier and the worker tier as separate Deployments (the
+# binary supports ROLE=web|worker|all) so they scale independently: the web tier
+# on HTTP load (HPA), the worker tier on scan-queue backlog (KEDA).
+
+image:
+  repository: ghcr.io/zvdy/parserod
+  # Defaults to the chart appVersion when empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Non-secret application config (mapped to env vars).
+config:
+  identityHeader: "X-Auth-Request-Email"
+  bingEnabled: false
+  maxPaths: 500
+  maxPerUser: 2
+  maxInflight: 50
+  maxQueueDepth: 100
+  rateLimitRps: 5
+  rateLimitBurst: 10
+  scanTimeout: "120s"
+  schedulerEnabled: true
+  schedulerSync: "1m"
+  # Extra raw env vars: [{name: FOO, value: bar}]
+  extraEnv: []
+
+# Database + Redis connection. Either reference an existing Secret that contains
+# DATABASE_URL and REDIS_URL, or provide the URLs here to have the chart create
+# the Secret for you.
+secrets:
+  existingSecret: ""
+  databaseUrl: "postgres://parsero:parsero@postgres:5432/parsero?sslmode=disable"
+  redisUrl: "redis://redis:6379/0"
+
+# Web tier (HTTP).
+web:
+  replicas: 2
+  workerCount: 0 # web pods don't process jobs
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# Worker tier (scan processing + scheduler).
+worker:
+  replicas: 1
+  workerCount: 4 # asynq concurrency per pod
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: "1", memory: 512Mi }
+  # KEDA autoscaling on asynq queue backlog (Redis list length). Requires KEDA
+  # installed in the cluster. Falls back to a static replica count when disabled.
+  keda:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 20
+    pollingInterval: 15
+    cooldownPeriod: 60
+    # Scale up when pending tasks exceed this length.
+    listLength: "5"
+    # Redis address KEDA polls for the asynq pending list. Defaults to the host
+    # parsed from secrets.redisUrl is not possible in templates, so set it here.
+    redisAddress: "redis:6379"
+    # Optional: name of a secret + key holding the Redis password for KEDA.
+    passwordSecret: ""
+    passwordKey: "redis-password"
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  host: parsero.example.com
+  annotations: {}
+  tls:
+    enabled: false
+    secretName: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

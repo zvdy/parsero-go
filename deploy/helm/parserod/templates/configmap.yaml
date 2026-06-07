@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "parserod.fullname" . }}-config
+  labels:
+    {{- include "parserod.labels" . | nindent 4 }}
+data:
+  PORT: "8080"
+  IDENTITY_HEADER: {{ .Values.config.identityHeader | quote }}
+  BING_ENABLED: {{ .Values.config.bingEnabled | quote }}
+  MAX_PATHS: {{ .Values.config.maxPaths | quote }}
+  MAX_PER_USER: {{ .Values.config.maxPerUser | quote }}
+  MAX_INFLIGHT: {{ .Values.config.maxInflight | quote }}
+  MAX_QUEUE_DEPTH: {{ .Values.config.maxQueueDepth | quote }}
+  RATE_LIMIT_RPS: {{ .Values.config.rateLimitRps | quote }}
+  RATE_LIMIT_BURST: {{ .Values.config.rateLimitBurst | quote }}
+  SCAN_TIMEOUT: {{ .Values.config.scanTimeout | quote }}
+  SCHEDULER_SYNC: {{ .Values.config.schedulerSync | quote }}

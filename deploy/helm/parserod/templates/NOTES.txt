@@ -1,0 +1,21 @@
+parserod has been deployed.
+
+Web tier:    {{ include "parserod.fullname" . }}-web      (ROLE=web, HPA={{ .Values.web.autoscaling.enabled }})
+Worker tier: {{ include "parserod.fullname" . }}-worker   (ROLE=worker, KEDA={{ .Values.worker.keda.enabled }})
+
+{{- if .Values.ingress.enabled }}
+URL: http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}
+{{- else }}
+The web Service is type {{ .Values.service.type }}. Port-forward to try it:
+
+  kubectl port-forward svc/{{ include "parserod.fullname" . }} 8080:{{ .Values.service.port }}
+  open http://localhost:8080
+{{- end }}
+
+IMPORTANT:
+- Auth is delegated to your reverse proxy / ingress. Put an authenticating proxy
+  (e.g. oauth2-proxy) in front and have it inject the {{ .Values.config.identityHeader }}
+  header; parserod trusts it.
+{{- if .Values.worker.keda.enabled }}
+- Worker autoscaling requires KEDA (https://keda.sh) installed in the cluster.
+{{- end }}

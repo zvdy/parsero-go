@@ -1,0 +1,43 @@
+{{- if .Values.worker.keda.enabled }}
+{{- if .Values.worker.keda.passwordSecret }}
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: {{ include "parserod.fullname" . }}-redis-auth
+  labels:
+    {{- include "parserod.labels" . | nindent 4 }}
+spec:
+  secretTargetRef:
+    - parameter: password
+      name: {{ .Values.worker.keda.passwordSecret }}
+      key: {{ .Values.worker.keda.passwordKey }}
+---
+{{- end }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "parserod.fullname" . }}-worker
+  labels:
+    {{- include "parserod.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  scaleTargetRef:
+    name: {{ include "parserod.fullname" . }}-worker
+  minReplicaCount: {{ .Values.worker.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.worker.keda.maxReplicas }}
+  pollingInterval: {{ .Values.worker.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.worker.keda.cooldownPeriod }}
+  triggers:
+    # Scale on the asynq pending-task backlog for the "scans" queue. asynq stores
+    # pending tasks in the Redis list  asynq:{<queue>}:pending.
+    - type: redis
+      metadata:
+        address: {{ .Values.worker.keda.redisAddress | quote }}
+        listName: "asynq:{scans}:pending"
+        listLength: {{ .Values.worker.keda.listLength | quote }}
+        enableTLS: "false"
+      {{- if .Values.worker.keda.passwordSecret }}
+      authenticationRef:
+        name: {{ include "parserod.fullname" . }}-redis-auth
+      {{- end }}
+{{- end }}

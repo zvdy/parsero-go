@@ -156,31 +156,170 @@ The JSON output includes:
 
 When using the `--only200` flag, the JSON output will only include results with a 200 status code.
 
-## 
+## Web service (SaaS mode)
+
+In addition to the CLI, parsero ships as a horizontally-scalable web service
+(`parserod`) exposing an **HTMX UI + REST API**. It is built for multi-tenant
+use: scans run as **async jobs** so any instance can process and report them,
+and the engine is fully stateless behind a load balancer.
+
+### Screenshots
+
+| Home — scan, monitors & history | Live results table |
+|---|---|
+| ![Home](assets/screenshots/home.png) | ![Scan results](assets/screenshots/scan-results.png) |
+
+Recurring monitors — schedule re-scans and get alerted when a `Disallow` path
+becomes reachable:
+
+![Monitors](assets/screenshots/monitors.png)
+
+SSRF guardrails reject internal/private targets before any request is made:
+
+![SSRF blocked](assets/screenshots/ssrf-blocked.png)
+
+> These images are generated from a live instance by
+> [`scripts/screenshots.mjs`](scripts/screenshots.mjs) and refreshed in CI (see
+> the [screenshots workflow](.github/workflows/screenshots.yml)).
+
+### Architecture
+
+```mermaid
+flowchart TB
+    Browser([Browser])
+    Proxy["LB / reverse proxy + oauth2-proxy<br/>(TLS · auth · injects identity header)"]
+
+    subgraph App["parserod · many stateless instances"]
+        API["HTMX UI + REST API"]
+        Worker["asynq worker<br/>(bounded concurrency)"]
+    end
+
+    Redis[("Redis<br/>queue (asynq) · cache (results/robots) · throttle counters")]
+    Postgres[("Postgres<br/>durable scans + scan_results · source of truth")]
+
+    Browser --> Proxy --> API
+    API -- "enqueue task" --> Redis
+    API -- "read cache" --> Redis
+    Redis -- "deliver task" --> Worker
+    Worker -- "fetch robots.txt / probe paths" --> Targets([Target sites])
+    API -- "read/write" --> Postgres
+    Worker -- "persist results + summary" --> Postgres
+    Worker -- "populate cache + progress" --> Redis
+```
+
+- **Postgres** is the durable source of truth for scans and per-path results.
+- **Redis** holds the job queue (via [asynq](https://github.com/hibiken/asynq)),
+  a result/robots.txt cache, and the throttle counters.
+- **Auth** is delegated to a reverse proxy (e.g. oauth2-proxy / Traefik
+  forward-auth) that injects a trusted identity header (`X-Auth-Request-Email`
+  by default); parserod handles no passwords or tokens itself.
+
+### Guardrails
+
+Because the service fetches arbitrary user-supplied URLs, it enforces:
+
+- **SSRF protection** — targets are normalized and resolved IPs are checked
+  against a deny-list (loopback, RFC1918, link-local incl. cloud metadata
+  `169.254.169.254`, IPv6 local/multicast). The HTTP transport re-validates at
+  dial time to defeat DNS-rebinding, and redirect hops are re-checked.
+- **Throttling / backpressure** — a max queue depth (returns `429` when busy),
+  a per-user concurrent-scan cap, and a global in-flight cap keep resource use
+  bounded as you scale.
+- **Rate limiting**, per-request **timeouts**, and a **max paths** cap.
+
+### Run it locally
+
+```sh
+docker compose up --build           # postgres + redis + app on :8080
+# optional: a reverse proxy doing auth header injection
+docker compose --profile auth up --build
+```
+
+Then open <http://localhost:8080>.
+
+### REST API
+
+| Method | Route | Purpose |
+|---|---|---|
+| `POST` | `/api/scans` | create a scan (or return a cached one) |
+| `GET`  | `/api/scans` | list the caller's scans |
+| `GET`  | `/api/scans/{id}` | scan status + summary |
+| `GET`  | `/api/scans/{id}/results` | per-path results |
+| `GET`  | `/api/scans/{id}/sarif` | results as SARIF 2.1.0 (GitHub code scanning) |
+| `GET`  | `/api/scans/{id}/events` | live progress via Server-Sent Events |
+| `POST` | `/api/schedules` | create a recurring monitor |
+| `GET`  | `/api/schedules` | list monitors |
+| `DELETE` | `/api/schedules/{id}` | delete a monitor |
+| `POST` | `/api/schedules/{id}/enable` · `/disable` | toggle a monitor |
+
+```sh
+curl -X POST http://localhost:8080/api/scans \
+  -H 'Content-Type: application/json' \
+  -H 'X-Auth-Request-Email: you@example.com' \
+  -d '{"target":"example.com","only200":true}'
+```
+
+### Recurring monitors (scheduled scans + diff alerts)
+
+Create a monitor and parsero re-scans on a cron schedule, **diffing each run
+against the previous one** and posting a webhook/Slack alert when a `Disallow`
+path *becomes reachable* — the security regression worth catching. Webhook URLs
+are SSRF-guarded like scan targets.
+
+```sh
+curl -X POST http://localhost:8080/api/schedules \
+  -H 'Content-Type: application/json' -H 'X-Auth-Request-Email: you@example.com' \
+  -d '{"target":"example.com","cron":"@daily","notify_webhook":"https://hooks.slack.com/...","notify_on_change":true}'
+```
+
+### Deploy
+
+Production-ready infrastructure as code lives under [`deploy/`](deploy):
+
+- **[Helm chart](deploy/helm/parserod)** — split **web** (HPA on CPU) and
+  **worker** (KEDA autoscaling on the asynq queue backlog) Deployments, a
+  hardened pod security context, optional Ingress/TLS, and a managed or
+  bring-your-own Secret for the DB/Redis URLs.
+- **[Terraform module (AWS)](deploy/terraform)** — ECS Fargate (web + worker
+  services), RDS Postgres, ElastiCache Redis, an ALB, and Secrets Manager.
+
+Both run the binary in two roles via `ROLE=web|worker|all`, so the HTTP tier and
+the scan-worker tier scale independently.
+
+### Configuration
+
+Configured via environment variables (defaults shown): `PORT` (8080),
+`DATABASE_URL`, `REDIS_URL`, `SCAN_CACHE_TTL` (10m), `ROBOTS_CACHE_TTL` (5m),
+`SCAN_TIMEOUT` (120s), `MAX_PATHS` (500), `WORKER_COUNT` (4),
+`MAX_INFLIGHT` (50), `MAX_PER_USER` (2), `MAX_QUEUE_DEPTH` (100),
+`RATE_LIMIT_RPS` (5), `RATE_LIMIT_BURST` (10),
+`IDENTITY_HEADER` (`X-Auth-Request-Email`), `BING_ENABLED` (false),
+`ROLE` (`all`; `web`|`worker`|`all`), `SCHEDULER_ENABLED` (true),
+`SCHEDULER_SYNC` (1m).
 
 ## Docker Setup
 
-You can use the [Dockerfile](Dockerfile) in the root of the repository to build parsero as a container.
+The [Dockerfile](Dockerfile) is multi-stage and builds the **server**
+(`parserod`) by default. Pass `--build-arg TARGET=parsero` to build the CLI
+instead.
 
-### Step-by-Step Docker Setup
+### Build the CLI image
 
-1. **Build the Docker Image**:
-   Open a terminal in the root of your project directory and run the following command to build the Docker image:
+```sh
+docker build --build-arg TARGET=parsero -t parsero:latest .
+docker run -it --rm parsero:latest --url http://hackthissite.org --only200
+```
 
-   ```sh
-   docker build -t parsero:latest .
-   ```
+### Build the server image
 
-2. **Run the Docker Container**:
-   After building the image, you can run it using the following command:
-
-   ```sh
-   docker run -it --rm parsero:latest --url http://hackthissite.org --only200
-   ```
+```sh
+docker build -t parserod:latest .
+# parserod needs Postgres + Redis; the easiest path is `docker compose up`.
+```
 
 ### Docker Hub
 
-You can retrieve the image directly from Docker hub too.
+You can retrieve the CLI image directly from Docker hub too.
 
    ```sh
    docker pull zvdy/parsero:latest

@@ -1,0 +1,35 @@
+{{define "index"}}{{template "header" .}}
+  <section class="card">
+    <h1>Scan a site's robots.txt</h1>
+    <p class="muted">Parsero fetches <code>/robots.txt</code>, then probes each
+      <code>Disallow</code> path to find what's actually reachable.</p>
+    <form hx-post="/ui/scans" hx-target="#submit-error" hx-swap="innerHTML" class="scan-form">
+      <input type="text" name="target" placeholder="example.com" required autofocus>
+      <label class="check"><input type="checkbox" name="only200"> Only show HTTP 200</label>
+      {{if .BingEnabled}}<label class="check"><input type="checkbox" name="search_bing"> Augment with Bing</label>{{end}}
+      <button type="submit">Scan</button>
+    </form>
+    <div id="submit-error" class="error-slot"></div>
+  </section>
+
+  <section class="card">
+    <h2>Recurring monitors</h2>
+    <p class="muted">Schedule periodic re-scans; get a webhook alert when a
+      <code>Disallow</code> path becomes reachable.</p>
+    <form hx-post="/ui/schedules" hx-target="#monitors" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful) this.reset()" class="scan-form">
+      <input type="text" name="target" placeholder="example.com" required>
+      <input type="text" name="cron" placeholder="cron, e.g. @daily or 0 * * * *" required>
+      <input type="url" name="notify_webhook" placeholder="https://hooks.slack.com/… (optional)">
+      <label class="check"><input type="checkbox" name="notify_on_change" checked> Only on change</label>
+      <button type="submit">Add monitor</button>
+    </form>
+    <div id="submit-error-sched" class="error-slot"></div>
+    <div id="monitors">{{template "monitors" .}}</div>
+  </section>
+
+  <section class="card">
+    <h2>Recent scans</h2>
+    {{template "history" .}}
+  </section>
+{{template "footer" .}}{{end}}

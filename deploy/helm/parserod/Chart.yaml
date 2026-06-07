@@ -1,0 +1,15 @@
+apiVersion: v2
+name: parserod
+description: Parsero SaaS — robots.txt audit web service (HTMX UI + REST API) with async scan workers.
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
+home: https://github.com/zvdy/parsero-go
+sources:
+  - https://github.com/zvdy/parsero-go
+keywords:
+  - security
+  - robots.txt
+  - scanner
+maintainers:
+  - name: zvdy

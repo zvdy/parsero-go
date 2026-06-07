@@ -1,0 +1,20 @@
+{{define "history"}}
+  {{if .Scans}}
+  <table class="history">
+    <thead><tr><th>Target</th><th>Status</th><th>Paths</th><th>200s</th><th>When</th></tr></thead>
+    <tbody>
+      {{range .Scans}}
+      <tr>
+        <td><a href="/scan/{{.ID}}">{{.Target}}</a></td>
+        <td><span class="badge {{statusClass .}}">{{.Status}}</span></td>
+        <td>{{.TotalPaths}}</td>
+        <td>{{.Status200}}</td>
+        <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="muted">No scans yet.</p>
+  {{end}}
+{{end}}

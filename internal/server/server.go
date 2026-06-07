@@ -1,0 +1,94 @@
+// Package server exposes the parsero REST API and HTMX UI. It is stateless:
+// all shared state lives in Postgres (durable) and Redis (queue/cache/throttle),
+// so any number of instances can run behind a load balancer.
+package server
+
+import (
+	"embed"
+	"html/template"
+	"net/http"
+
+	"github.com/zvdy/parsero-go/internal/cache"
+	"github.com/zvdy/parsero-go/internal/config"
+	"github.com/zvdy/parsero-go/internal/queue"
+	"github.com/zvdy/parsero-go/internal/store"
+)
+
+//go:embed templates/*.html
+var templatesFS embed.FS
+
+//go:embed static/*
+var staticFS embed.FS
+
+type Server struct {
+	cfg       config.Config
+	store     *store.Store
+	cache     *cache.Cache
+	queue     *queue.Client
+	templates *template.Template
+	limiter   *rateLimiter
+}
+
+func New(cfg config.Config, st *store.Store, c *cache.Cache, q *queue.Client) (*Server, error) {
+	tmpl, err := template.New("").Funcs(template.FuncMap{
+		"statusClass": scanStatusClass,
+		"percent": func(done, total int) int {
+			if total <= 0 {
+				return 0
+			}
+			return done * 100 / total
+		},
+	}).ParseFS(templatesFS, "templates/*.html")
+	if err != nil {
+		return nil, err
+	}
+	return &Server{
+		cfg:       cfg,
+		store:     st,
+		cache:     c,
+		queue:     q,
+		templates: tmpl,
+		limiter:   newRateLimiter(cfg.RateLimitRPS, cfg.RateLimitBurst),
+	}, nil
+}
+
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+
+	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+
+	mux.HandleFunc("POST /api/scans", s.handleCreateScan)
+	mux.HandleFunc("GET /api/scans", s.handleListScans)
+	mux.HandleFunc("GET /api/scans/{id}", s.handleGetScan)
+	mux.HandleFunc("GET /api/scans/{id}/results", s.handleGetResults)
+	mux.HandleFunc("GET /api/scans/{id}/sarif", s.handleGetSARIF)
+	mux.HandleFunc("GET /api/scans/{id}/events", s.handleEvents)
+
+	mux.HandleFunc("POST /api/schedules", s.handleCreateSchedule)
+	mux.HandleFunc("GET /api/schedules", s.handleListSchedules)
+	mux.HandleFunc("DELETE /api/schedules/{id}", s.handleDeleteSchedule)
+	mux.HandleFunc("POST /api/schedules/{id}/enable", s.handleEnableSchedule)
+	mux.HandleFunc("POST /api/schedules/{id}/disable", s.handleDisableSchedule)
+
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+
+	mux.HandleFunc("GET /{$}", s.handleIndex)
+	mux.HandleFunc("POST /ui/scans", s.handleUISubmit)
+	mux.HandleFunc("GET /scan/{id}", s.handleScanPage)
+	mux.HandleFunc("GET /ui/scans/{id}/status", s.handleUIStatus)
+	mux.HandleFunc("GET /ui/scans/{id}/results", s.handleUIResults)
+	mux.HandleFunc("POST /ui/schedules", s.handleUIScheduleSubmit)
+	mux.HandleFunc("DELETE /ui/schedules/{id}", s.handleUIScheduleDelete)
+
+	// Order: logging -> identity -> rate limit.
+	return s.withLogging(s.withIdentity(s.withRateLimit(mux)))
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if err := s.store.Pool().Ping(r.Context()); err != nil {
+		http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}

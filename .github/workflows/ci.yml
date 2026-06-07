@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: build · vet · test
+    runs-on: ubuntu-latest
+    # Postgres + Redis are available for any integration tests; unit tests don't
+    # need them but the service containers make the suite future-proof.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: parsero
+          POSTGRES_PASSWORD: parsero
+          POSTGRES_DB: parsero
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U parsero"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgres://parsero:parsero@localhost:5432/parsero?sslmode=disable
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { echo 'Run gofmt:'; gofmt -l .; exit 1; }
+      - name: go vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      - name: test
+        run: go test -race ./...
+
+  docker:
+    name: docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build server image (parserod)
+        run: docker build --build-arg TARGET=parserod -t parserod:ci .
+      - name: Build CLI image (parsero)
+        run: docker build --build-arg TARGET=parsero -t parsero:ci .
+      - name: Smoke-test CLI image
+        run: docker run --rm parsero:ci --help
+
+  helm:
+    name: helm chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: helm lint
+        run: helm lint deploy/helm/parserod
+      - name: helm template (default + variations)
+        run: |
+          helm template t deploy/helm/parserod >/dev/null
+          helm template t deploy/helm/parserod \
+            --set ingress.enabled=true --set worker.keda.enabled=false \
+            --set secrets.existingSecret=my-secret >/dev/null
+
+  terraform:
+    name: terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: fmt check
+        run: terraform -chdir=deploy/terraform fmt -recursive -check
+      - name: validate module
+        run: |
+          terraform -chdir=deploy/terraform init -backend=false -input=false
+          terraform -chdir=deploy/terraform validate
+      - name: validate example
+        run: |
+          terraform -chdir=deploy/terraform/examples/basic init -backend=false -input=false
+          terraform -chdir=deploy/terraform/examples/basic validate

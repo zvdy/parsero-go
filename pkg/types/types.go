@@ -17,4 +17,8 @@ type Result struct {
 	StatusCode int
 	Status     string
 	Error      error
+	// Source indicates where the result came from: "robots" (disallow entry
+	// probed directly) or "bing" (discovered via Bing search). Empty defaults
+	// to "robots" for backward compatibility.
+	Source string `json:"source,omitempty"`
 }

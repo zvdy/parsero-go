@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -9,9 +10,8 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
-	"github.com/zvdy/parsero-go/internal/check"
 	"github.com/zvdy/parsero-go/internal/logo"
-	"github.com/zvdy/parsero-go/internal/search"
+	"github.com/zvdy/parsero-go/internal/scanner"
 	"github.com/zvdy/parsero-go/pkg/colors"
 	"github.com/zvdy/parsero-go/pkg/export"
 	"github.com/zvdy/parsero-go/pkg/types"
@@ -80,9 +80,9 @@ func main() {
 				}
 				defer f.Close()
 
-				scanner := bufio.NewScanner(f)
-				for scanner.Scan() {
-					urls = append(urls, scanner.Text())
+				scn := bufio.NewScanner(f)
+				for scn.Scan() {
+					urls = append(urls, scn.Text())
 				}
 			}
 
@@ -94,38 +94,38 @@ func main() {
 				logo.PrintLogo()
 			}
 
-			for _, url := range urls {
-				url = strings.TrimPrefix(url, "http://")
+			for _, u := range urls {
+				u = strings.TrimPrefix(u, "http://")
 				startTime := time.Now()
 
 				if !jsonStdout {
-					check.PrintDate(url)
+					printDate(u)
 				}
 
-				// Check disallowed URLs in robots.txt
-				checkResults := check.ConnCheck(url, only200, concurrency)
+				sc := scanner.New(nil, scanner.Options{
+					Only200:     only200,
+					SearchBing:  searchDisallow,
+					Concurrency: concurrency,
+				})
 
-				// Initialize searchResults
-				var searchResults []types.Result
-
-				// Only search for disallowed entries if the flag is set
-				if searchDisallow {
+				results, disallow, err := sc.Run(context.Background(), u)
+				if err != nil {
 					if !jsonStdout {
-						fmt.Println("\nSearching for disallowed entries using Bing...")
+						fmt.Println(colors.FAIL + err.Error() + colors.ENDC)
 					}
-					searchResults = search.SearchDisallowEntries(url, only200, concurrency)
+				} else if len(disallow) == 0 {
+					if !jsonStdout {
+						fmt.Println(colors.YELLOW + "No Disallow entries found in robots.txt." + colors.ENDC)
+					}
+				} else if !jsonStdout {
+					fmt.Printf("Found %d Disallow entries. Processing with %d workers...\n", len(disallow), concurrency)
+					printResults(results, only200)
 				}
-
-				// Combine all results for export
-				var allResults []types.Result
-				allResults = append(allResults, checkResults...)
-				allResults = append(allResults, searchResults...)
 
 				duration := time.Since(startTime)
 
-				// Handle JSON output if requested
 				if jsonFile != "" || jsonStdout {
-					scanResult := export.CreateScanResult(url, duration, allResults, only200)
+					scanResult := export.CreateScanResult(u, duration, results, only200)
 
 					if jsonStdout {
 						jsonStr, err := export.ToJSON(scanResult)
@@ -158,4 +158,28 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+}
+
+// printResults keeps the original CLI output: 200s green, others red unless
+// only200, errors skipped.
+func printResults(results []types.Result, only200 bool) {
+	for _, r := range results {
+		if r.Error != nil {
+			continue
+		}
+		prefix := ""
+		if r.Source == scanner.SourceBing {
+			prefix = " - "
+		}
+		if r.StatusCode == 200 {
+			fmt.Println(colors.OKGREEN + prefix + r.URL + " " + r.Status + colors.ENDC)
+		} else if !only200 {
+			fmt.Println(colors.FAIL + prefix + r.URL + " " + r.Status + colors.ENDC)
+		}
+	}
+}
+
+func printDate(url string) {
+	fmt.Println("Starting Parsero v2.0.0 (https://github.com/zvdy/parsero-go) at " + time.Now().Format("01/02/2006 15:04:05"))
+	fmt.Println("Parsero scan report for " + url)
 }
